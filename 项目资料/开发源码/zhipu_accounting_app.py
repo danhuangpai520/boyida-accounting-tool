@@ -51,11 +51,6 @@ OCR_PROFILE_LABELS = {
     "trt": "极限：PP-OCRv5(ch)+TensorRT/FP16 [仅GPU]",
 }
 OCR_PROFILE_BY_LABEL = {label: key for key, label in OCR_PROFILE_LABELS.items()}
-OCR_PROFILE_DETAILS = {
-    "stable": "同一套 PP-OCRv5 中文 OCR，开启方向分类、图像矫正、文本行方向；CPU/GPU 都可用，作为自动兜底基线。",
-    "fast": "同一套 PP-OCRv5 中文 OCR，启用 HPI 高性能推理并提高 batch；GPU 优先，缺 ultra-infer/HPI 时会自动降到稳妥档。",
-    "trt": "同一套 PP-OCRv5 中文 OCR，尝试 HPI + TensorRT + FP16；仅适合 GPU 环境，失败会自动降到极速/稳妥档。",
-}
 DEFAULT_EXCEL_IMAGE_MODE = "external"
 EXCEL_IMAGE_MODES = {"external", "embedded"}
 
@@ -496,7 +491,7 @@ def parse_weight(record: dict) -> tuple[str, list[str]]:
     texts = [str(t).strip() for t in record.get("rec_texts", []) if str(t).strip()]
     labels = {
         "settlement": ("结算重量", "结算重后", "超系重装"),
-        "net": ("净重", "净车", "净星", "净里"),
+        "net": ("净重", "净车", "净星", "净里", "净量", "净中", "近重", "近中"),
         "gross": ("毛重", "毛果"),
         "tare": ("皮重", "空重", "免量", "空里"),
     }
@@ -516,16 +511,17 @@ def parse_weight(record: dict) -> tuple[str, list[str]]:
         diff = found["gross"][0] - found["tare"][0]
 
     remarks = []
-    value = found["settlement"][0] if found["settlement"] else (found["net"][0] if found["net"] else diff)
+    # 过磅做账只认净重口径：先取“净重”字段，缺失时只用毛重-皮重推导净重。
+    value = found["net"][0] if found["net"] else diff
     if value is None:
-        return "", ["重量模糊"]
+        return "", ["净重缺失待核"]
     if found["settlement"] and found["net"] and abs(found["settlement"][0] - found["net"][0]) > 20:
         remarks.append("重量冲突需核对")
     if found["settlement"] and diff and abs(found["settlement"][0] - diff) > 20:
         remarks.append("重量冲突需核对")
     if value < 1000 and diff:
         value = diff
-        remarks.append("重量模糊")
+        remarks.append("净重模糊按毛皮差")
     return f"{value / 1000:.2f}", remarks
 
 
@@ -2131,6 +2127,8 @@ def self_test() -> int:
     assert parse_dates(["毛重时间 2026-05-31 10:00"], "")[0] == "2026/5/31"
     assert parse_weight({"rec_texts": ["<table><tr><td>净重</td><td>51320 kg</td></tr><tr><td>毛重时间</td><td>2026-5-26</td></tr></table>"]})[0] == "51.32"
     assert parse_weight({"rec_texts": ["<table><tr><td>毛重</td><td>53970</td></tr><tr><td>空重</td><td>40790</td></tr><tr><td>净重</td><td>13180</td></tr><tr><td>结算重量</td><td></td></tr><tr><td>空重时间</td><td>2026-05-23</td></tr></table>"]})[0] == "13.18"
+    assert parse_weight({"rec_texts": ["<table><tr><td>结算重量</td><td>99990</td></tr><tr><td>净重</td><td>13180</td></tr></table>"]})[0] == "13.18"
+    assert parse_weight({"rec_texts": ["<table><tr><td>毛重</td><td>53970</td></tr><tr><td>皮重</td><td>40790</td></tr><tr><td>结算重量</td><td>99990</td></tr></table>"]})[0] == "13.18"
     assert parse_cargo(["<table><tr><td>货名</td><td>朝渣</td></tr></table>"])[0] == "钢渣"
     assert parse_cargo(["<table><tr><td>货名</td><td>客户板</td></tr></table>"])[0] == "卷子板"
     assert auth_header("abc") == "Bearer abc"
@@ -2568,7 +2566,6 @@ class AccountingApp:
         self.api_key_source = StringVar(value=f"Key 来源：{key_source}")
         self.remember_api_key = BooleanVar(value=True)
         self.ocr_profile = StringVar(value=OCR_PROFILE_LABELS["fast"])
-        self.ocr_profile_detail = StringVar()
         self.skip_ocr_if_json = BooleanVar(value=True)
         self.raw_json = StringVar(value=str(output_dir / "paddle_ocr_raw.json"))
         self.input_status = StringVar()
@@ -2582,7 +2579,6 @@ class AccountingApp:
         self.excel_columns = excel_template["columns"]
         self.excel_image_mode = excel_template["image_mode"]
         self._refresh_workspace_status()
-        self._refresh_ocr_profile_detail()
 
         self._configure_theme()
         self._set_window_icon()
@@ -2638,9 +2634,6 @@ class AccountingApp:
         if value in OCR_PROFILE_LABELS:
             return value
         return OCR_PROFILE_BY_LABEL.get(value, "fast")
-
-    def _refresh_ocr_profile_detail(self, *_args) -> None:
-        self.ocr_profile_detail.set(OCR_PROFILE_DETAILS.get(self.selected_ocr_profile(), OCR_PROFILE_DETAILS["fast"]))
 
     def _start_window_drag(self, event) -> None:
         if self._is_maximized:
@@ -3064,10 +3057,6 @@ class AccountingApp:
         chrome.pack(fill="x")
         chrome.bind("<ButtonPress-1>", self._start_window_drag)
         chrome.bind("<B1-Motion>", self._drag_window)
-        title = ttk.Label(chrome, text=APP_TITLE, style="Titlebar.TLabel")
-        title.pack(side="left")
-        title.bind("<ButtonPress-1>", self._start_window_drag)
-        title.bind("<B1-Motion>", self._drag_window)
         ttk.Button(chrome, text="X", command=self.root.destroy, style="Close.TButton", width=3).pack(side="right")
         ttk.Button(chrome, text="□", command=self._toggle_maximize_window, style="Chrome.TButton", width=3).pack(side="right", padx=(4, 0))
         ttk.Button(chrome, text="-", command=self._minimize_window, style="Chrome.TButton", width=3).pack(side="right", padx=(4, 0))
@@ -3224,13 +3213,11 @@ class AccountingApp:
         ttk.Label(ocr_panel, text="OCR 档位 / 实际模型", style="PanelMuted.TLabel").grid(row=2, column=0, sticky="w")
         combo = ttk.Combobox(ocr_panel, textvariable=self.ocr_profile, values=list(OCR_PROFILE_LABELS.values()), state="readonly", width=38)
         combo.grid(row=3, column=0, sticky="ew", pady=(3, 4))
-        self.ocr_profile.trace_add("write", self._refresh_ocr_profile_detail)
-        ttk.Label(ocr_panel, textvariable=self.ocr_profile_detail, style="PanelMuted.TLabel", wraplength=290).grid(row=4, column=0, sticky="ew", pady=(0, 6))
-        ttk.Checkbutton(ocr_panel, text="已有 OCR JSON 时跳过整批 OCR", variable=self.skip_ocr_if_json).grid(row=5, column=0, sticky="w", pady=(0, 6))
-        ttk.Label(ocr_panel, text="ZHIPU API Key", style="PanelMuted.TLabel").grid(row=6, column=0, sticky="w")
-        ttk.Entry(ocr_panel, textvariable=self.api_key, show="*").grid(row=7, column=0, sticky="ew", pady=(3, 5))
-        ttk.Checkbutton(ocr_panel, text="记住 Key（仅本机）", variable=self.remember_api_key).grid(row=8, column=0, sticky="w")
-        ttk.Label(ocr_panel, textvariable=self.api_key_source, style="PanelMuted.TLabel").grid(row=9, column=0, sticky="w", pady=(5, 0))
+        ttk.Checkbutton(ocr_panel, text="已有 OCR JSON 时跳过整批 OCR", variable=self.skip_ocr_if_json).grid(row=4, column=0, sticky="w", pady=(0, 6))
+        ttk.Label(ocr_panel, text="ZHIPU API Key", style="PanelMuted.TLabel").grid(row=5, column=0, sticky="w")
+        ttk.Entry(ocr_panel, textvariable=self.api_key, show="*").grid(row=6, column=0, sticky="ew", pady=(3, 5))
+        ttk.Checkbutton(ocr_panel, text="记住 Key（仅本机）", variable=self.remember_api_key).grid(row=7, column=0, sticky="w")
+        ttk.Label(ocr_panel, textvariable=self.api_key_source, style="PanelMuted.TLabel").grid(row=8, column=0, sticky="w", pady=(5, 0))
 
         self.log("已启动。放入图片后直接点“一键出表”。")
 

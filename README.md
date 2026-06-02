@@ -16,6 +16,6 @@
 
 ## 当前版本
 
-当前正式版本：`v1.3`
+当前正式版本：`v1.4`
 
 下载入口：[GitHub Releases](https://github.com/danhuangpai520/boyida-accounting-tool/releases)
