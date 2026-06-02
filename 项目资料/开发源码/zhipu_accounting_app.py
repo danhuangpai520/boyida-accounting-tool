@@ -492,8 +492,6 @@ def parse_weight(record: dict) -> tuple[str, list[str]]:
     labels = {
         "settlement": ("结算重量", "结算重后", "超系重装"),
         "net": ("净重", "净车", "净星", "净里", "净量", "净中", "近重", "近中"),
-        "gross": ("毛重", "毛果"),
-        "tare": ("皮重", "空重", "免量", "空里"),
     }
     found = {key: [] for key in labels}
     for key, names in labels.items():
@@ -506,22 +504,13 @@ def parse_weight(record: dict) -> tuple[str, list[str]]:
             if value is not None:
                 found[key].append(value)
 
-    diff = None
-    if found["gross"] and found["tare"] and found["gross"][0] > found["tare"][0]:
-        diff = found["gross"][0] - found["tare"][0]
-
     remarks = []
-    # 过磅做账只认净重口径：先取“净重”字段，缺失时只用毛重-皮重推导净重。
-    value = found["net"][0] if found["net"] else diff
+    # 做账重量只接受“净重”或“结算重量”；毛重/皮重/空重不能反推最终重量。
+    value = found["net"][0] if found["net"] else (found["settlement"][0] if found["settlement"] else None)
     if value is None:
-        return "", ["净重缺失待核"]
+        return "", ["净重/结算重量缺失待核"]
     if found["settlement"] and found["net"] and abs(found["settlement"][0] - found["net"][0]) > 20:
         remarks.append("重量冲突需核对")
-    if found["settlement"] and diff and abs(found["settlement"][0] - diff) > 20:
-        remarks.append("重量冲突需核对")
-    if value < 1000 and diff:
-        value = diff
-        remarks.append("净重模糊按毛皮差")
     return f"{value / 1000:.2f}", remarks
 
 
@@ -2127,8 +2116,11 @@ def self_test() -> int:
     assert parse_dates(["毛重时间 2026-05-31 10:00"], "")[0] == "2026/5/31"
     assert parse_weight({"rec_texts": ["<table><tr><td>净重</td><td>51320 kg</td></tr><tr><td>毛重时间</td><td>2026-5-26</td></tr></table>"]})[0] == "51.32"
     assert parse_weight({"rec_texts": ["<table><tr><td>毛重</td><td>53970</td></tr><tr><td>空重</td><td>40790</td></tr><tr><td>净重</td><td>13180</td></tr><tr><td>结算重量</td><td></td></tr><tr><td>空重时间</td><td>2026-05-23</td></tr></table>"]})[0] == "13.18"
-    assert parse_weight({"rec_texts": ["<table><tr><td>结算重量</td><td>99990</td></tr><tr><td>净重</td><td>13180</td></tr></table>"]})[0] == "13.18"
-    assert parse_weight({"rec_texts": ["<table><tr><td>毛重</td><td>53970</td></tr><tr><td>皮重</td><td>40790</td></tr><tr><td>结算重量</td><td>99990</td></tr></table>"]})[0] == "13.18"
+    assert parse_weight({"rec_texts": ["<table><tr><td>结算重量</td><td>99990</td></tr></table>"]})[0] == "99.99"
+    conflict_weight, conflict_remarks = parse_weight({"rec_texts": ["<table><tr><td>结算重量</td><td>99990</td></tr><tr><td>净重</td><td>13180</td></tr></table>"]})
+    assert conflict_weight == "13.18" and "重量冲突需核对" in conflict_remarks
+    assert parse_weight({"rec_texts": ["<table><tr><td>毛重</td><td>53970</td></tr><tr><td>皮重</td><td>40790</td></tr><tr><td>结算重量</td><td>99990</td></tr></table>"]})[0] == "99.99"
+    assert parse_weight({"rec_texts": ["<table><tr><td>毛重</td><td>53970</td></tr><tr><td>皮重</td><td>40790</td></tr></table>"]})[0] == ""
     assert parse_cargo(["<table><tr><td>货名</td><td>朝渣</td></tr></table>"])[0] == "钢渣"
     assert parse_cargo(["<table><tr><td>货名</td><td>客户板</td></tr></table>"])[0] == "卷子板"
     assert auth_header("abc") == "Bearer abc"
