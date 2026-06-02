@@ -30,6 +30,15 @@ from tkinter import BooleanVar, Canvas, DoubleVar, END, Menu, PhotoImage, String
 
 import xlsxwriter
 
+from boyida_updater import (
+    download_update_exe,
+    fetch_latest_release_info,
+    is_newer_version,
+    release_info_from_payload,
+    write_update_launcher,
+)
+from boyida_ui_panels import build_center_panel, build_left_panel, build_right_panel
+
 try:
     from embedded_default_key import BUILTIN_API_KEY_B64
 except Exception:
@@ -38,6 +47,7 @@ except Exception:
 
 COMPANY_NAME = "保谊达"
 APP_TITLE = f"{COMPANY_NAME}车队做账工具"
+APP_VERSION = "1.6"
 IMAGE_SUFFIXES = {".jpg", ".jpeg", ".png", ".bmp", ".webp"}
 HEADERS = ["日期", "车号", "驾驶员", "重量", "货物名称", "装货地", "收货地", "备注", "原图"]
 OCR_ENGINE_LABELS = {
@@ -1488,6 +1498,12 @@ def app_base_dir() -> Path:
     return Path.cwd()
 
 
+def current_executable_path() -> Path:
+    if getattr(sys, "frozen", False):
+        return Path(sys.executable).resolve()
+    return app_base_dir() / "做账执行工具.exe"
+
+
 def daily_workspace_name(today: date | None = None) -> str:
     today = today or date.today()
     return f"{today:%Y-%m-%d}_保谊达做账表"
@@ -2110,6 +2126,28 @@ def find_best_paddle_environment(preferred_python: str = "", log_fn=None) -> tup
 
 
 def self_test() -> int:
+    assert APP_VERSION == "1.6"
+    assert is_newer_version("v1.10", "1.9")
+    assert is_newer_version("v1.6", "1.5")
+    assert not is_newer_version("v1.6", "1.6")
+    fake_release = {
+        "tag_name": "v9.9",
+        "name": "做账执行工具 v9.9",
+        "html_url": "https://example.com/release",
+        "assets": [
+            {"name": "readme.txt", "browser_download_url": "https://example.com/readme.txt"},
+            {
+                "name": "boyida-accounting-tool-v9.9.exe",
+                "browser_download_url": "https://example.com/app.exe",
+                "size": 123,
+                "digest": "sha256:" + "a" * 64,
+            },
+        ],
+    }
+    fake_info = release_info_from_payload(fake_release)
+    assert fake_info["tag"] == "v9.9"
+    assert fake_info["asset_name"].endswith(".exe")
+    assert fake_info["sha256"] == "A" * 64
     assert DRIVER_BY_PLATE["浙A07336D"] == "孙安足"
     assert "运输录入_2026.5.12-2026.5.31.xlsx".endswith(".xlsx")
     assert normalize_plate("车号 浙A07336D")[0] == "浙A07336D"
@@ -2579,6 +2617,7 @@ class AccountingApp:
         self.root.bind("<Map>", self._restore_borderless)
         self.root.after(150, self._drain_events)
         self.root.after(600, self.refresh_gps_on_startup)
+        self.root.after(1400, self.check_for_updates_on_startup)
 
     def _configure_initial_window(self) -> None:
         metrics = adaptive_window_metrics(self.root.winfo_screenwidth(), self.root.winfo_screenheight())
@@ -3077,141 +3116,12 @@ class AccountingApp:
         workbench.columnconfigure(2, minsize=right_width)
         workbench.rowconfigure(0, weight=1)
 
-        left_panel = ttk.LabelFrame(
-            workbench,
-            text="批次与操作",
-            style="Panel.TLabelframe",
-            padding=(10 if compact else 12, 14 if compact else 16, 10 if compact else 12, 8 if compact else 10),
-        )
-        left_panel.grid(row=0, column=0, sticky="nsew", padx=(0, 8 if compact else 10))
-        left_panel.columnconfigure(0, weight=1)
-        left_panel.rowconfigure(0, weight=1)
-        left_panel.rowconfigure(2, weight=1)
-        left_content = ttk.Frame(left_panel, style="Panel.TFrame")
-        left_content.grid(row=1, column=0, sticky="ew")
-        left_content.columnconfigure(0, weight=1)
-        ttk.Label(left_content, textvariable=self.input_status, style="BatchStatus.TLabel").grid(row=0, column=0, sticky="ew", pady=(4, 8))
-        ttk.Label(left_content, textvariable=self.output_status, style="BatchPath.TLabel").grid(row=1, column=0, sticky="ew", pady=(0, 18))
-        ttk.Button(left_content, text="导入图片", command=self._choose_image_dir, style="Batch.TButton").grid(row=2, column=0, sticky="ew", pady=(0, 10), ipady=3)
-        ttk.Button(left_content, text="待处理图片", command=self.open_image_dir, style="Batch.TButton").grid(row=3, column=0, sticky="ew", pady=10, ipady=3)
-
-        ttk.Frame(left_content, height=18, style="Panel.TFrame").grid(row=4, column=0, sticky="ew")
-        ttk.Button(left_content, text="一键出表", command=self.run_all, style="BatchPrimary.TButton").grid(
-            row=5,
-            column=0,
-            sticky="ew",
-            pady=(10, 14),
-            ipady=5,
-        )
-        action_grid = ttk.Frame(left_content, style="Panel.TFrame")
-        action_grid.grid(row=6, column=0, sticky="ew")
-        action_grid.columnconfigure(0, weight=1)
-        action_grid.columnconfigure(1, weight=1)
-        action_buttons = [
-            ("扫图片", self.scan_batch),
-            ("打开结果", self.open_work_dir),
-            ("OCR 设置", self.open_ocr_settings),
-            ("GPS 设置", self.open_gps_settings),
-        ]
-        for index, (text, command) in enumerate(action_buttons):
-            row = index // 2
-            column = index % 2
-            ttk.Button(action_grid, text=text, command=command, style="Batch.TButton").grid(
-                row=row,
-                column=column,
-                sticky="ew",
-                padx=(0, 4) if column == 0 else (4, 0),
-                pady=8,
-                ipady=3,
-            )
-
-        center_panel = ttk.LabelFrame(workbench, text="流程管线", style="Panel.TLabelframe", padding=(8 if compact else 10, 8 if compact else 10))
-        center_panel.grid(row=0, column=1, sticky="nsew", padx=(0, 8 if compact else 10))
-        center_panel.rowconfigure(0, weight=0)
-        center_panel.rowconfigure(1, weight=1)
-        center_panel.columnconfigure(0, weight=1)
-        pipeline_width = 300 if ultra_compact else (390 if compact else 470)
-        pipeline_height = 116 if ultra_compact else (122 if compact else 132)
-        self.pipeline_canvas = Canvas(center_panel, width=pipeline_width, height=pipeline_height, bg=THEME["log"], highlightthickness=0)
-        self.pipeline_canvas.grid(row=0, column=0, sticky="ew")
-        self.pipeline_canvas.bind("<Configure>", lambda _event: self._draw_pipeline_panel(self.pipeline_canvas))
-        self._draw_pipeline_panel(self.pipeline_canvas)
-
-        progress_panel = ttk.Frame(center_panel, style="Panel.TFrame")
-        progress_panel.grid(row=1, column=0, sticky="nsew", pady=(10, 0))
-        progress_panel.columnconfigure(0, weight=1)
-        progress_panel.rowconfigure(2, weight=1)
-        progress_header = ttk.Frame(progress_panel, style="Panel.TFrame")
-        progress_header.grid(row=0, column=0, sticky="ew", pady=(0, 5))
-        progress_header.columnconfigure(0, weight=1)
-        ttk.Label(progress_header, textvariable=self.progress_title, style="Panel.TLabel").grid(row=0, column=0, sticky="w")
-        ttk.Label(progress_header, textvariable=self.progress_detail, style="PanelMuted.TLabel").grid(row=0, column=1, sticky="e", padx=(12, 8))
-        ttk.Label(progress_header, textvariable=self.progress_percent, style="ProgressPercent.TLabel").grid(row=0, column=2, sticky="e")
-        ttk.Progressbar(
-            progress_panel,
-            variable=self.progress_value,
-            maximum=100,
-            mode="determinate",
-            style="Ops.Horizontal.TProgressbar",
-        ).grid(row=1, column=0, sticky="ew", pady=(0, 6))
-        progress_log_frame = ttk.Frame(progress_panel, style="Panel.TFrame")
-        progress_log_frame.grid(row=2, column=0, sticky="nsew")
-        progress_log_frame.columnconfigure(0, weight=1)
-        progress_log_frame.rowconfigure(0, weight=1)
-        self.progress_log_text = Text(
-            progress_log_frame,
-            wrap="word",
-            height=7 if compact else 8,
-            bg=THEME["log"],
-            fg=THEME["muted"],
-            insertbackground=THEME["cyan"],
-            selectbackground=THEME["selected"],
-            relief="flat",
-            borderwidth=0,
-            padx=8,
-            pady=6,
-            state="disabled",
-            font=("Consolas", 10),
-        )
-        self.progress_log_text.tag_configure("section", foreground=THEME["cyan"], font=("Microsoft YaHei UI", 10, "bold"))
-        self.progress_log_text.tag_configure("success", foreground=THEME["green"])
-        self.progress_log_text.tag_configure("error", foreground="#ffd1d8", background="#3a0d16")
-        progress_scroll = ttk.Scrollbar(progress_log_frame, orient="vertical", command=self.progress_log_text.yview)
-        self.progress_log_text.configure(yscrollcommand=progress_scroll.set)
-        self.progress_log_text.grid(row=0, column=0, sticky="nsew")
-        progress_scroll.grid(row=0, column=1, sticky="ns")
-
-        right_panel = ttk.Frame(workbench, style="App.TFrame")
-        right_panel.grid(row=0, column=2, sticky="nsew")
-        right_panel.columnconfigure(0, weight=1)
-        right_panel.rowconfigure(1, weight=1)
-
-        telemetry = ttk.LabelFrame(right_panel, text="车队遥测", style="Panel.TLabelframe", padding=(8, 8))
-        telemetry.grid(row=0, column=0, sticky="ew")
-        route_width = 260 if ultra_compact else (288 if compact else 310)
-        route_height = 124 if compact else 132
-        self.route_canvas = Canvas(telemetry, width=route_width, height=route_height, bg=THEME["log"], highlightthickness=0, cursor="hand2")
-        self.route_canvas.pack(fill="x")
-        self.route_canvas.bind("<Button-1>", lambda _event: self.refresh_gps())
-        self.route_canvas.bind("<Configure>", lambda _event: self._draw_route_panel(self.route_canvas))
-        self._draw_route_panel(self.route_canvas)
-
-        ocr_panel = ttk.LabelFrame(right_panel, text="OCR 控制", style="Panel.TLabelframe", padding=(8 if compact else 9, 6 if compact else 7))
-        ocr_panel.grid(row=1, column=0, sticky="nsew", pady=(8 if compact else 10, 0))
-        ocr_panel.columnconfigure(0, weight=1)
-        ttk.Label(ocr_panel, text="OCR 引擎", style="PanelMuted.TLabel").grid(row=0, column=0, sticky="w")
-        engine_combo = ttk.Combobox(ocr_panel, textvariable=self.ocr_engine, values=list(OCR_ENGINE_LABELS.values()), state="readonly", width=30)
-        engine_combo.grid(row=1, column=0, sticky="ew", pady=(3, 6))
-        ttk.Label(ocr_panel, text="OCR 档位 / 实际模型", style="PanelMuted.TLabel").grid(row=2, column=0, sticky="w")
-        combo = ttk.Combobox(ocr_panel, textvariable=self.ocr_profile, values=list(OCR_PROFILE_LABELS.values()), state="readonly", width=38)
-        combo.grid(row=3, column=0, sticky="ew", pady=(3, 4))
-        ttk.Checkbutton(ocr_panel, text="已有 OCR JSON 时跳过整批 OCR", variable=self.skip_ocr_if_json).grid(row=4, column=0, sticky="w", pady=(0, 6))
-        ttk.Label(ocr_panel, text="ZHIPU API Key", style="PanelMuted.TLabel").grid(row=5, column=0, sticky="w")
-        ttk.Entry(ocr_panel, textvariable=self.api_key, show="*").grid(row=6, column=0, sticky="ew", pady=(3, 5))
-        ttk.Checkbutton(ocr_panel, text="记住 Key（仅本机）", variable=self.remember_api_key).grid(row=7, column=0, sticky="w")
-        ttk.Label(ocr_panel, textvariable=self.api_key_source, style="PanelMuted.TLabel").grid(row=8, column=0, sticky="w", pady=(5, 0))
+        build_left_panel(self, workbench, compact, ultra_compact)
+        build_center_panel(self, workbench, compact, ultra_compact, THEME)
+        build_right_panel(self, workbench, compact, ultra_compact, THEME, OCR_ENGINE_LABELS, OCR_PROFILE_LABELS)
 
         self.log("已启动。放入图片后直接点“一键出表”。")
+        self.log(f"当前版本：v{APP_VERSION}")
 
     def _path_row(self, parent: ttk.Frame, row: int, label: str, var: StringVar, command) -> None:
         ttk.Label(parent, text=label, width=16, style="Panel.TLabel").grid(row=row, column=0, sticky="w", pady=4)
@@ -3275,6 +3185,94 @@ class AccountingApp:
             ],
             columns=3,
         )
+
+    def check_for_updates_on_startup(self) -> None:
+        if "--startup-smoke-test" in sys.argv or os.environ.get("BOYIDA_DISABLE_UPDATE_CHECK"):
+            return
+        if self.worker_thread and self.worker_thread.is_alive():
+            self.root.after(2000, self.check_for_updates_on_startup)
+            return
+
+        def runner() -> None:
+            try:
+                info = fetch_latest_release_info(APP_VERSION, timeout=10)
+                if is_newer_version(info["tag"], APP_VERSION):
+                    self.post(f"发现新版 {info['tag']}，可点击提示更新。", "success")
+                    self.root.after(0, lambda data=info: self._prompt_update(data, automatic=True))
+            except Exception as exc:
+                self.post(f"自动检查更新失败：{exc}")
+
+        threading.Thread(target=runner, daemon=True).start()
+
+    def check_for_updates(self) -> None:
+        self.run_background("检查更新", self._check_updates_impl)
+
+    def _check_updates_impl(self) -> None:
+        self.post_progress(15, "检查更新", "连接 GitHub")
+        info = fetch_latest_release_info(APP_VERSION, timeout=15)
+        self.post_progress(60, "检查更新", f"最新版本 {info['tag']}")
+        self.post(f"当前版本：v{APP_VERSION}")
+        self.post(f"GitHub 最新版本：{info['tag']}")
+        if not is_newer_version(info["tag"], APP_VERSION):
+            self.post_progress(100, "检查更新", "当前已是最新版")
+            self.post("当前已是最新版。", "success")
+            return
+        size_mb = info.get("size", 0) / 1024 / 1024
+        self.post(f"发现新版：{info['tag']}，附件 {info['asset_name']}，约 {size_mb:.1f} MB", "success")
+        if info.get("sha256"):
+            self.post(f"GitHub 摘要：{info['sha256']}")
+        else:
+            self.post("GitHub 未提供 SHA256 摘要，下载后只能做本地完整性检查。")
+        self.post_progress(100, "检查更新", "等待确认")
+        self.root.after(350, lambda data=info: self._prompt_update(data, automatic=False))
+
+    def _prompt_update(self, info: dict, automatic: bool = False) -> None:
+        size_mb = info.get("size", 0) / 1024 / 1024
+        prefix = "检测到新版本" if automatic else "发现新版本"
+        message = (
+            f"{prefix}：{info['tag']}\n"
+            f"当前版本：v{APP_VERSION}\n"
+            f"文件：{info['asset_name']}，约 {size_mb:.1f} MB\n\n"
+            "是否现在下载并重启更新？"
+        )
+        if not messagebox.askyesno(APP_TITLE, message, parent=self.root):
+            self.log("已取消更新。")
+            return
+        self.run_background("下载更新", lambda: self._download_update_impl(info))
+
+    def _download_update_impl(self, info: dict) -> None:
+        if not getattr(sys, "frozen", False):
+            raise RuntimeError("当前是源码运行模式，不能自更新；请用打包后的 EXE 测试更新。")
+        current_exe = current_executable_path()
+        safe_name = re.sub(r'[<>:"/\\|?*]+', "_", info.get("asset_name") or "做账执行工具.exe")
+        target = config_dir() / "updates" / f"{info['tag']}_{safe_name}"
+        self.post_progress(8, "下载更新", "准备下载")
+        self.post(f"下载地址：{info['download_url']}")
+
+        def progress(done: int, total: int) -> None:
+            percent = 10 + 76 * done / max(total, 1)
+            self.post_progress(percent, "下载更新", f"{done / 1024 / 1024:.1f}/{total / 1024 / 1024:.1f} MB")
+
+        actual_sha = download_update_exe(info, target, APP_VERSION, progress)
+        self.post_progress(88, "下载更新", "校验文件")
+        self.post(f"下载完成：{target}", "success")
+        self.post(f"本地 SHA256：{actual_sha}")
+        if info.get("sha256"):
+            self.post("SHA256 校验通过。", "success")
+        launcher = write_update_launcher(target, current_exe, os.getpid(), config_dir() / "updates")
+        self.post_progress(96, "下载更新", "准备替换")
+        self.post(f"更新器：{launcher}")
+        self.root.after(0, lambda path=launcher: self._confirm_apply_update(path))
+
+    def _confirm_apply_update(self, launcher: Path) -> None:
+        message = "新版已经下载完成。现在重启软件并替换为新版？\n\n旧版会备份到程序旁边的“更新备份”文件夹。"
+        if not messagebox.askyesno(APP_TITLE, message, parent=self.root):
+            self.log("新版已下载，但暂未替换；下次可重新点击“更新”。")
+            return
+        self.log("正在启动更新器，软件将关闭并重启。", "success")
+        creationflags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+        subprocess.Popen(["cmd.exe", "/c", str(launcher)], creationflags=creationflags)
+        self.root.after(250, self.root.destroy)
 
     def refresh_gps_on_startup(self) -> None:
         if not gps_api_configured():
@@ -3667,7 +3665,7 @@ class AccountingApp:
             if not self.api_key.get().strip():
                 raise RuntimeError(
                     "在线智谱 GLM-OCR 没有可用 API Key，已停止生成 Excel。\n"
-                    "处理办法：点“OCR 设置”填写 ZHIPU API Key，或使用带内置 Key 的新版 exe。"
+                    "处理办法：点“OCR 设置”填写 ZHIPU API Key，并勾选“记住 Key（仅本机）”。"
                 )
             self.post("OCR 预检：使用在线智谱 GLM-OCR；本机不需要安装 PaddleOCR。", "section")
             return images, status
@@ -4123,12 +4121,10 @@ def startup_smoke_test() -> int:
         assert Path(app.work_dir.get()).parent.name == daily_workspace_name()
         assert app.ocr_engine.get() == OCR_ENGINE_LABELS["glm"]
         assert app.ocr_profile.get() == OCR_PROFILE_LABELS["fast"]
-        if getattr(sys, "frozen", False):
-            key_value, key_source = initial_api_key()
-            assert key_value.strip(), key_source
-
+        if os.environ.get("BOYIDA_EXPECT_NO_EMBEDDED_KEY"):
+            assert not builtin_api_key(), "公开版 EXE 不应包含内置 API Key"
         texts = set(_widget_texts(app.root))
-        for label in ("导入图片", "待处理图片", "扫图片", "一键出表", "打开结果", "OCR 设置", "GPS 设置"):
+        for label in ("导入图片", "待处理图片", "扫图片", "一键出表", "打开结果", "OCR 设置", "GPS 设置", "检查更新"):
             assert label in texts, label
         assert "□" in texts
         assert "Excel 设置" not in texts
@@ -4176,7 +4172,7 @@ def startup_smoke_test() -> int:
         app.root.update()
         print(
             "STARTUP_SMOKE_OK "
-            f"buttons=5 input={managed_input_dir().exists()} output={managed_output_dir().exists()} "
+            f"main_actions=5 update=True input={managed_input_dir().exists()} output={managed_output_dir().exists()} "
             f"sec={time.time() - started:.2f}"
         )
         return 0

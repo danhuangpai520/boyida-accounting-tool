@@ -1,5 +1,6 @@
 ﻿param(
-    [string]$KeyFile = "builtin_api_key.txt"
+    [string]$KeyFile = "builtin_api_key.txt",
+    [switch]$EmbedKey
 )
 
 $ErrorActionPreference = "Stop"
@@ -61,7 +62,9 @@ if (Test-Path -LiteralPath $OutputExe) {
     Save-VersionManifest -Directory $OldVersionDir -Kind "构建前旧版" -ExePath (Join-Path $OldVersionDir $OutputExeName)
 }
 
-if (Test-Path -LiteralPath $KeyFile) {
+if (-not $EmbedKey) {
+    $ApiKey = ""
+} elseif (Test-Path -LiteralPath $KeyFile) {
     $ApiKey = (Get-Content -LiteralPath $KeyFile -Raw -Encoding UTF8).Trim()
 } elseif (-not [string]::IsNullOrWhiteSpace($env:ZHIPU_API_KEY)) {
     $ApiKey = $env:ZHIPU_API_KEY.Trim()
@@ -80,11 +83,11 @@ if (Test-Path -LiteralPath $KeyFile) {
     }
 }
 
-if ([string]::IsNullOrWhiteSpace($ApiKey)) {
+if ($EmbedKey -and [string]::IsNullOrWhiteSpace($ApiKey)) {
     throw "API Key is empty. Build stopped."
 }
 
-$B64 = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($ApiKey))
+$B64 = if ($EmbedKey) { [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($ApiKey)) } else { "" }
 $KeyModule = Join-Path $SourceRoot "embedded_default_key.py"
 $KeyModuleContent = "BUILTIN_API_KEY_B64 = `"$B64`"`r`n"
 [IO.File]::WriteAllText($KeyModule, $KeyModuleContent, [Text.UTF8Encoding]::new($false))
@@ -101,6 +104,8 @@ $NewVersionDir = Join-Path $VersionRoot "${BuildStamp}_新版"
 New-Item -ItemType Directory -Path $NewVersionDir -Force | Out-Null
 Copy-Item -LiteralPath $OutputExe -Destination (Join-Path $NewVersionDir $OutputExeName) -Force
 Copy-Item -LiteralPath (Join-Path $SourceRoot "zhipu_accounting_app.py") -Destination (Join-Path $NewVersionDir "zhipu_accounting_app.py") -Force
+Copy-IfExists -Path (Join-Path $SourceRoot "boyida_updater.py") -Destination (Join-Path $NewVersionDir "boyida_updater.py") | Out-Null
+Copy-IfExists -Path (Join-Path $SourceRoot "boyida_ui_panels.py") -Destination (Join-Path $NewVersionDir "boyida_ui_panels.py") | Out-Null
 Copy-IfExists -Path (Join-Path $SourceRoot "设置内置Key并打包.ps1") -Destination (Join-Path $NewVersionDir "设置内置Key并打包.ps1") | Out-Null
 Copy-IfExists -Path (Join-Path $SourceRoot "zhipu_accounting_tool.spec") -Destination (Join-Path $NewVersionDir "zhipu_accounting_tool.spec") | Out-Null
 Copy-IfExists -Path (Join-Path $ProjectRoot "做账执行规范.md") -Destination (Join-Path $NewVersionDir "做账执行规范.md") | Out-Null
@@ -108,9 +113,17 @@ Copy-IfExists -Path (Join-Path $ProjectRoot "项目资料\说明与发布\使用
 Save-VersionManifest -Directory $NewVersionDir -Kind "新版" -ExePath (Join-Path $NewVersionDir $OutputExeName)
 
 Write-Host ""
-Write-Host "Built EXE with embedded default API Key:"
+if ($EmbedKey) {
+    Write-Host "Built EXE with embedded default API Key:"
+} else {
+    Write-Host "Built EXE without embedded default API Key:"
+}
 Write-Host $OutputExe
 Write-Host "Version backup:"
 Write-Host $NewVersionDir
-Write-Host "The temporary key module has been cleared. The EXE still contains the embedded default key."
+if ($EmbedKey) {
+    Write-Host "The temporary key module has been cleared. The EXE still contains the embedded default key."
+} else {
+    Write-Host "The EXE contains no embedded default key."
+}
 Write-Host "If $KeyFile is temporary, delete it now."
