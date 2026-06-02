@@ -46,11 +46,16 @@ OCR_ENGINE_LABELS = {
 }
 OCR_ENGINE_BY_LABEL = {label: key for key, label in OCR_ENGINE_LABELS.items()}
 OCR_PROFILE_LABELS = {
-    "stable": "本地稳妥档（准确优先）",
-    "fast": "本地快速档（5090 推荐）",
-    "trt": "本地极限档（TensorRT/FP16）",
+    "stable": "稳妥：PP-OCRv5(ch) 标准推理 batch=8",
+    "fast": "极速：PP-OCRv5(ch)+HPI batch=16",
+    "trt": "极限：PP-OCRv5(ch)+TensorRT/FP16",
 }
 OCR_PROFILE_BY_LABEL = {label: key for key, label in OCR_PROFILE_LABELS.items()}
+OCR_PROFILE_DETAILS = {
+    "stable": "同一套 PP-OCRv5 中文 OCR，开启方向分类、图像矫正、文本行方向；速度稳，不追求极限加速。",
+    "fast": "同一套 PP-OCRv5 中文 OCR，启用 HPI 高性能推理并提高 batch；5090 推荐，通常更快，不代表更会猜。",
+    "trt": "同一套 PP-OCRv5 中文 OCR，尝试 HPI + TensorRT + FP16；要求最高，偏速度/吞吐，环境不支持会自动降级参数。",
+}
 DEFAULT_EXCEL_IMAGE_MODE = "external"
 EXCEL_IMAGE_MODES = {"external", "embedded"}
 DEFAULT_EXCEL_COLUMNS = [
@@ -2490,6 +2495,7 @@ class AccountingApp:
         self.api_key_source = StringVar(value=f"Key 来源：{key_source}")
         self.remember_api_key = BooleanVar(value=True)
         self.ocr_profile = StringVar(value=OCR_PROFILE_LABELS["fast"])
+        self.ocr_profile_detail = StringVar()
         self.skip_ocr_if_json = BooleanVar(value=True)
         self.raw_json = StringVar(value=str(output_dir / "paddle_ocr_raw.json"))
         self.input_status = StringVar()
@@ -2503,6 +2509,7 @@ class AccountingApp:
         self.excel_columns = excel_template["columns"]
         self.excel_image_mode = excel_template["image_mode"]
         self._refresh_workspace_status()
+        self._refresh_ocr_profile_detail()
 
         self._configure_theme()
         self._set_window_icon()
@@ -2552,6 +2559,9 @@ class AccountingApp:
         if value in OCR_PROFILE_LABELS:
             return value
         return OCR_PROFILE_BY_LABEL.get(value, "fast")
+
+    def _refresh_ocr_profile_detail(self, *_args) -> None:
+        self.ocr_profile_detail.set(OCR_PROFILE_DETAILS.get(self.selected_ocr_profile(), OCR_PROFILE_DETAILS["fast"]))
 
     def _start_window_drag(self, event) -> None:
         if self._is_maximized:
@@ -3154,14 +3164,16 @@ class AccountingApp:
         ttk.Label(ocr_panel, text="OCR 引擎", style="PanelMuted.TLabel").grid(row=0, column=0, sticky="w")
         engine_combo = ttk.Combobox(ocr_panel, textvariable=self.ocr_engine, values=list(OCR_ENGINE_LABELS.values()), state="readonly", width=30)
         engine_combo.grid(row=1, column=0, sticky="ew", pady=(3, 6))
-        ttk.Label(ocr_panel, text="OCR 档位", style="PanelMuted.TLabel").grid(row=2, column=0, sticky="w")
-        combo = ttk.Combobox(ocr_panel, textvariable=self.ocr_profile, values=list(OCR_PROFILE_LABELS.values()), state="readonly", width=30)
-        combo.grid(row=3, column=0, sticky="ew", pady=(3, 6))
-        ttk.Checkbutton(ocr_panel, text="已有 OCR JSON 时跳过整批 OCR", variable=self.skip_ocr_if_json).grid(row=4, column=0, sticky="w", pady=(0, 6))
-        ttk.Label(ocr_panel, text="ZHIPU API Key", style="PanelMuted.TLabel").grid(row=5, column=0, sticky="w")
-        ttk.Entry(ocr_panel, textvariable=self.api_key, show="*").grid(row=6, column=0, sticky="ew", pady=(3, 5))
-        ttk.Checkbutton(ocr_panel, text="记住 Key（仅本机）", variable=self.remember_api_key).grid(row=7, column=0, sticky="w")
-        ttk.Label(ocr_panel, textvariable=self.api_key_source, style="PanelMuted.TLabel").grid(row=8, column=0, sticky="w", pady=(5, 0))
+        ttk.Label(ocr_panel, text="OCR 档位 / 实际模型", style="PanelMuted.TLabel").grid(row=2, column=0, sticky="w")
+        combo = ttk.Combobox(ocr_panel, textvariable=self.ocr_profile, values=list(OCR_PROFILE_LABELS.values()), state="readonly", width=38)
+        combo.grid(row=3, column=0, sticky="ew", pady=(3, 4))
+        self.ocr_profile.trace_add("write", self._refresh_ocr_profile_detail)
+        ttk.Label(ocr_panel, textvariable=self.ocr_profile_detail, style="PanelMuted.TLabel", wraplength=290).grid(row=4, column=0, sticky="ew", pady=(0, 6))
+        ttk.Checkbutton(ocr_panel, text="已有 OCR JSON 时跳过整批 OCR", variable=self.skip_ocr_if_json).grid(row=5, column=0, sticky="w", pady=(0, 6))
+        ttk.Label(ocr_panel, text="ZHIPU API Key", style="PanelMuted.TLabel").grid(row=6, column=0, sticky="w")
+        ttk.Entry(ocr_panel, textvariable=self.api_key, show="*").grid(row=7, column=0, sticky="ew", pady=(3, 5))
+        ttk.Checkbutton(ocr_panel, text="记住 Key（仅本机）", variable=self.remember_api_key).grid(row=8, column=0, sticky="w")
+        ttk.Label(ocr_panel, textvariable=self.api_key_source, style="PanelMuted.TLabel").grid(row=9, column=0, sticky="w", pady=(5, 0))
 
         self.log("已启动。放入图片后直接点“一键出表”。")
 
