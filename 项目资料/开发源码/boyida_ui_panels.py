@@ -3,11 +3,21 @@ from tkinter import Canvas, Text, ttk
 
 def build_left_panel(app, workbench, compact: bool, ultra_compact: bool) -> None:
     del ultra_compact
+    panel_pad = (8 if compact else 10, 10 if compact else 12, 8 if compact else 10, 6 if compact else 8)
+    status_gap = (2, 4 if compact else 6)
+    path_gap = (0, 8 if compact else 10)
+    button_gap = 5 if compact else 6
+    primary_gap = (6 if compact else 8, 8 if compact else 10)
+    action_gap = 5 if compact else 6
+    update_gap = (8 if compact else 10, 0)
+    spacer_height = 8 if compact else 10
+    batch_ipady = 2 if compact else 3
+    primary_ipady = 4 if compact else 5
     left_panel = ttk.LabelFrame(
         workbench,
         text="批次与操作",
         style="Panel.TLabelframe",
-        padding=(10 if compact else 12, 14 if compact else 16, 10 if compact else 12, 8 if compact else 10),
+        padding=panel_pad,
     )
     left_panel.grid(row=0, column=0, sticky="nsew", padx=(0, 8 if compact else 10))
     left_panel.columnconfigure(0, weight=1)
@@ -17,17 +27,17 @@ def build_left_panel(app, workbench, compact: bool, ultra_compact: bool) -> None
     left_content = ttk.Frame(left_panel, style="Panel.TFrame")
     left_content.grid(row=1, column=0, sticky="ew")
     left_content.columnconfigure(0, weight=1)
-    ttk.Label(left_content, textvariable=app.input_status, style="BatchStatus.TLabel").grid(row=0, column=0, sticky="ew", pady=(4, 8))
-    ttk.Label(left_content, textvariable=app.output_status, style="BatchPath.TLabel").grid(row=1, column=0, sticky="ew", pady=(0, 18))
-    ttk.Button(left_content, text="导入图片", command=app._choose_image_dir, style="Batch.TButton").grid(row=2, column=0, sticky="ew", pady=(0, 10), ipady=3)
-    ttk.Button(left_content, text="待处理图片", command=app.open_image_dir, style="Batch.TButton").grid(row=3, column=0, sticky="ew", pady=10, ipady=3)
-    ttk.Frame(left_content, height=18, style="Panel.TFrame").grid(row=4, column=0, sticky="ew")
+    ttk.Label(left_content, textvariable=app.input_status, style="BatchStatus.TLabel").grid(row=0, column=0, sticky="ew", pady=status_gap)
+    ttk.Label(left_content, textvariable=app.output_status, style="BatchPath.TLabel").grid(row=1, column=0, sticky="ew", pady=path_gap)
+    ttk.Button(left_content, text="导入图片", command=app._choose_image_dir, style="Batch.TButton").grid(row=2, column=0, sticky="ew", pady=(0, button_gap), ipady=batch_ipady)
+    ttk.Button(left_content, text="待处理图片", command=app.open_image_dir, style="Batch.TButton").grid(row=3, column=0, sticky="ew", pady=button_gap, ipady=batch_ipady)
+    ttk.Frame(left_content, height=spacer_height, style="Panel.TFrame").grid(row=4, column=0, sticky="ew")
     ttk.Button(left_content, text="一键出表", command=app.run_all, style="BatchPrimary.TButton").grid(
         row=5,
         column=0,
         sticky="ew",
-        pady=(10, 14),
-        ipady=5,
+        pady=primary_gap,
+        ipady=primary_ipady,
     )
 
     action_grid = ttk.Frame(left_content, style="Panel.TFrame")
@@ -46,17 +56,17 @@ def build_left_panel(app, workbench, compact: bool, ultra_compact: bool) -> None
         ttk.Button(action_grid, text=text, command=command, style="Batch.TButton").grid(
             row=row,
             column=column,
-            sticky="ew",
-            padx=(0, 4) if column == 0 else (4, 0),
-            pady=8,
-            ipady=3,
-        )
+                sticky="ew",
+                padx=(0, 4) if column == 0 else (4, 0),
+                pady=action_gap,
+                ipady=batch_ipady,
+            )
     ttk.Button(left_content, text="检查更新", command=app.check_for_updates, style="Batch.TButton").grid(
         row=7,
         column=0,
         sticky="ew",
-        pady=(14, 0),
-        ipady=3,
+        pady=update_gap,
+        ipady=batch_ipady,
     )
 
 

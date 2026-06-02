@@ -47,7 +47,7 @@ except Exception:
 
 COMPANY_NAME = "保谊达"
 APP_TITLE = f"{COMPANY_NAME}车队做账工具"
-APP_VERSION = "1.7"
+APP_VERSION = "1.8"
 IMAGE_SUFFIXES = {".jpg", ".jpeg", ".png", ".bmp", ".webp"}
 HEADERS = ["日期", "车号", "驾驶员", "重量", "货物名称", "装货地", "收货地", "备注", "原图"]
 OCR_ENGINE_LABELS = {
@@ -2126,7 +2126,7 @@ def find_best_paddle_environment(preferred_python: str = "", log_fn=None) -> tup
 
 
 def self_test() -> int:
-    assert APP_VERSION == "1.7"
+    assert APP_VERSION == "1.8"
     assert is_newer_version("v1.10", "1.9")
     assert is_newer_version("v1.6", "1.5")
     assert not is_newer_version("v1.6", "1.6")
@@ -4103,6 +4103,19 @@ def _widget_texts(widget) -> list[str]:
     return texts
 
 
+def _find_widget_by_text(widget, text: str):
+    try:
+        if str(widget.cget("text")) == text:
+            return widget
+    except Exception:
+        pass
+    for child in widget.winfo_children():
+        found = _find_widget_by_text(child, text)
+        if found is not None:
+            return found
+    return None
+
+
 def startup_smoke_test() -> int:
     started = time.time()
     original_startfile = getattr(os, "startfile", None)
@@ -4126,6 +4139,9 @@ def startup_smoke_test() -> int:
         texts = set(_widget_texts(app.root))
         for label in ("导入图片", "待处理图片", "扫图片", "一键出表", "打开结果", "OCR 设置", "GPS 设置", "检查更新"):
             assert label in texts, label
+        update_button = _find_widget_by_text(app.root, "检查更新")
+        assert update_button is not None
+        assert update_button.winfo_rooty() + update_button.winfo_height() <= app.root.winfo_rooty() + app.root.winfo_height(), "检查更新按钮不可见"
         assert "□" in texts
         assert "Excel 设置" not in texts
         assert int(app.progress_log_text.cget("height")) <= 8
