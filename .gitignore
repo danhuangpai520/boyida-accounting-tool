@@ -1,0 +1,27 @@
+# Runtime batch data
+/待处理图片/
+/输出结果/
+/20??-??-??_保谊达做账表/
+/项目资料/开发源码/待处理图片/
+/项目资料/开发源码/输出结果/
+/项目资料/开发源码/20??-??-??_保谊达做账表/
+
+# Build products and caches
+**/__pycache__/
+*.py[cod]
+/项目资料/开发源码/build/
+/项目资料/开发源码/dist/
+
+# Local-only backups and test data
+/项目资料/版本备份/
+/项目资料/测试与备份/
+/compare_may_workbooks.py
+
+# Local secrets/config
+builtin_api_key.txt
+/项目资料/开发源码/builtin_api_key.txt
+config.json
+gps_api_config.json
+gps_summary.json
+.env
+.env.*
