@@ -5,7 +5,7 @@ a = Analysis(
     ['zhipu_accounting_app.py'],
     pathex=[],
     binaries=[],
-    datas=[('assets\\boyida_truck.png', 'assets'), ('assets\\boyida_truck.ico', 'assets')],
+    datas=[('assets\\boyida_truck.png', 'assets'), ('assets\\boyida_truck.ico', 'assets'), ('assets\\jingzhe_header_line.png', 'assets')],
     hiddenimports=[],
     hookspath=[],
     hooksconfig={},

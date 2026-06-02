@@ -79,6 +79,7 @@ GPS_API_DEFAULT_URL = "https://www.zjhzwt.com/gps-web/h5/mgr/car?getTeamsAndCars
 GPS_API_DEFAULT_METHOD = "GET"
 LOGO_PNG = Path("assets") / "boyida_truck.png"
 LOGO_ICO = Path("assets") / "boyida_truck.ico"
+JINGZHE_HEADER_PNG = Path("assets") / "jingzhe_header_line.png"
 DEFAULT_GPS_SUMMARY = {
     "company": "杭州保谊达供应链有限公司",
     "total": "18",
@@ -2475,6 +2476,7 @@ class AccountingApp:
         self.root.overrideredirect(True)
         self.logo_image: PhotoImage | None = None
         self.logo_thumb: PhotoImage | None = None
+        self.jingzhe_header_image: PhotoImage | None = None
         self.events: queue.Queue[str] = queue.Queue()
         self.worker_thread: threading.Thread | None = None
         self._log_started = False
@@ -2533,6 +2535,7 @@ class AccountingApp:
     def _set_window_icon(self) -> None:
         ico_path = resource_path(LOGO_ICO)
         png_path = resource_path(LOGO_PNG)
+        header_path = resource_path(JINGZHE_HEADER_PNG)
         try:
             if ico_path.exists():
                 self.root.iconbitmap(str(ico_path))
@@ -2544,6 +2547,11 @@ class AccountingApp:
                 self.root.iconphoto(True, self.logo_image)
         except Exception:
             pass
+        try:
+            if header_path.exists():
+                self.jingzhe_header_image = PhotoImage(file=str(header_path))
+        except Exception:
+            self.jingzhe_header_image = None
 
     def selected_ocr_engine(self) -> str:
         value = self.ocr_engine.get().strip()
@@ -2878,33 +2886,13 @@ class AccountingApp:
         for y in (18, h - 20):
             canvas.create_line(12, y, w - 12, y, fill=THEME["line_soft"])
 
-        line = "#d8f7ff"
-        cyan = THEME["cyan_dark"]
-        soft = THEME["line"]
-        dim = THEME["line_soft"]
-        x = 34
-        y = max(13, (h - 68) // 2 + 4)
-        front = [x + 18, y + 15, x + 92, y + 9, x + 110, y + 56, x + 25, y + 62]
-        side = [x + 92, y + 9, x + 184, y + 18, x + 205, y + 54, x + 110, y + 56]
-        roof = [x + 32, y + 9, x + 94, y + 2, x + 184, y + 18, x + 92, y + 9]
-        canvas.create_polygon(side, fill="", outline=soft, width=2)
-        canvas.create_polygon(front, fill="", outline=line, width=2)
-        canvas.create_polygon(roof, fill="", outline=cyan, width=2)
-        canvas.create_polygon(x + 34, y + 21, x + 82, y + 17, x + 93, y + 40, x + 42, y + 45, fill="", outline=line, width=2)
-        canvas.create_polygon(x + 112, y + 23, x + 154, y + 27, x + 164, y + 45, x + 120, y + 45, fill="", outline=cyan, width=2)
-        canvas.create_line(x + 49, y + 52, x + 103, y + 49, fill=line, width=2)
-        canvas.create_line(x + 36, y + 55, x + 106, y + 51, fill=soft, width=1)
-        canvas.create_line(x + 119, y + 53, x + 193, y + 50, fill=soft, width=2)
-        canvas.create_line(x + 172, y + 24, x + 196, y + 47, fill=cyan, width=2)
-        for offset in (0, 10, 20):
-            canvas.create_line(x + 44, y + 31 + offset, x + 92, y + 28 + offset, fill=dim)
-        for wheel_x, wheel_y in ((x + 62, y + 62), (x + 158, y + 60)):
-            canvas.create_oval(wheel_x - 13, wheel_y - 13, wheel_x + 13, wheel_y + 13, outline=line, width=2)
-            canvas.create_oval(wheel_x - 6, wheel_y - 6, wheel_x + 6, wheel_y + 6, outline=cyan, width=1)
-        canvas.create_line(x + 2, y + 75, x + 232, y + 68, fill=dim)
-        canvas.create_text(x + 226, y + 20, text="JINGZHE EV", anchor="e", fill=THEME["muted"], font=("Consolas", 8, "bold"))
-        for px, py in ((x + 212, y + 32), (x + 222, y + 36), (x + 232, y + 40), (x + 220, y + 52)):
-            canvas.create_rectangle(px, py, px + 3, py + 3, fill=cyan, outline="")
+        if self.jingzhe_header_image is not None:
+            image_y = min(0, (h - self.jingzhe_header_image.height()) // 2)
+            canvas.create_image(16, image_y, image=self.jingzhe_header_image, anchor="nw")
+            canvas.create_line(18, h - 10, 256, h - 10, fill=THEME["cyan_soft"])
+            canvas.create_text(254, h - 18, text="JINGZHE", anchor="e", fill=THEME["muted"], font=("Consolas", 8, "bold"))
+        else:
+            canvas.create_text(30, h // 2, text="JINGZHE EV", anchor="w", fill=THEME["muted"], font=("Consolas", 10, "bold"))
 
         title = f"{COMPANY_NAME} 运输单据做账工具"
         canvas.create_text(w // 2 + 2, h // 2 + 3, text=title, fill="#00111f", font=("Microsoft YaHei UI", 27, "bold"))
@@ -3024,7 +3012,7 @@ class AccountingApp:
         header = ttk.Frame(outer, style="App.TFrame")
         header.pack(fill="x", pady=(0, 8 if compact else 10))
 
-        header_height = 82 if compact else 92
+        header_height = 132 if compact else 150
         self.header_canvas = Canvas(header, height=header_height, bg=THEME["bg"], highlightthickness=0)
         self.header_canvas.pack(fill="x")
         self.header_canvas.bind("<Configure>", lambda _event: self._draw_header_panel(self.header_canvas))
