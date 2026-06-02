@@ -47,7 +47,7 @@ except Exception:
 
 COMPANY_NAME = "保谊达"
 APP_TITLE = f"{COMPANY_NAME}车队做账工具"
-APP_VERSION = "2.1"
+APP_VERSION = "2.2"
 IMAGE_SUFFIXES = {".jpg", ".jpeg", ".png", ".bmp", ".webp"}
 HEADERS = ["日期", "车号", "驾驶员", "重量", "货物名称", "装货地", "收货地", "备注", "原图"]
 OCR_ENGINE_LABELS = {
@@ -123,6 +123,7 @@ THEME = {
     "log": "#040a13",
     "log_section": "#082339",
     "selected": "#0f3b55",
+    "window_border": "#b7c7d6",
 }
 
 
@@ -132,13 +133,13 @@ def adaptive_window_metrics(screen_w: int, screen_h: int) -> dict:
     screen_h = max(int(screen_h or 0), 560)
     compact = screen_w < 1280 or screen_h < 820
 
-    width = min(1220, max(920, int(screen_w * 0.94)))
-    height = min(690, max(610, int(screen_h * 0.78)))
-    width = min(width, max(720, screen_w - 24))
+    width = min(1140, max(940, int(screen_w * 0.88)))
+    height = min(630, max(570, int(screen_h * 0.72)))
+    width = min(width, max(720, screen_w - 32))
     height = min(height, max(540, screen_h - 56))
 
-    min_width = 1080 if not compact else 860
-    min_height = 600 if not compact else 560
+    min_width = 1040 if not compact else 860
+    min_height = 580 if not compact else 550
     min_width = min(min_width, width)
     min_height = min(min_height, height)
 
@@ -2126,7 +2127,8 @@ def find_best_paddle_environment(preferred_python: str = "", log_fn=None) -> tup
 
 
 def self_test() -> int:
-    assert APP_VERSION == "2.1"
+    assert APP_VERSION == "2.2"
+    assert is_newer_version("v2.2", "2.1")
     assert is_newer_version("v2.1", "2.0")
     assert is_newer_version("v2.0", "1.9")
     assert not is_newer_version("v1.10", "2.0")
@@ -2179,8 +2181,8 @@ def self_test() -> int:
     assert small_metrics["height"] <= 712
     assert small_metrics["compact"] is True
     desktop_metrics = adaptive_window_metrics(1920, 1080)
-    assert desktop_metrics["width"] == 1220
-    assert desktop_metrics["height"] == 690
+    assert desktop_metrics["width"] == 1140
+    assert desktop_metrics["height"] == 630
     assert daily_workspace_name(date(2026, 6, 2)) == "2026-06-02_保谊达做账表"
     gpu_ready_state = {"paddleocr": True, "paddle": True, "cuda_compiled": True, "run_check": True}
     cpu_ready_state = {"paddleocr": True, "paddle": True, "cuda_compiled": False, "run_check": True}
@@ -2618,6 +2620,7 @@ class AccountingApp:
         self._install_resize_handles()
         self.root.bind("<Map>", self._restore_borderless)
         self.root.after(150, self._drain_events)
+        self.root.after(180, self._ensure_window_visible)
         self.root.after(600, self.refresh_gps_on_startup)
         self.root.after(1400, self.check_for_updates_on_startup)
 
@@ -2631,6 +2634,28 @@ class AccountingApp:
         )
         self.root.minsize(int(metrics["min_width"]), int(metrics["min_height"]))
         self._normal_geometry = self.root.geometry()
+
+    def _ensure_window_visible(self) -> None:
+        """Keep borderless windows inside the current desktop after VM/resolution changes."""
+        if self._is_maximized:
+            return
+        try:
+            self.root.update_idletasks()
+            screen_w = self.root.winfo_screenwidth()
+            screen_h = self.root.winfo_screenheight()
+            width = self.root.winfo_width()
+            height = self.root.winfo_height()
+            x = self.root.winfo_x()
+            y = self.root.winfo_y()
+            max_x = max(0, screen_w - width - 8)
+            max_y = max(0, screen_h - height - 48)
+            next_x = min(max(8, x), max_x)
+            next_y = min(max(8, y), max_y)
+            if next_x != x or next_y != y:
+                self.root.geometry(f"{width}x{height}+{next_x}+{next_y}")
+            self._normal_geometry = self.root.geometry()
+        except Exception:
+            pass
 
     def _set_window_icon(self) -> None:
         ico_path = resource_path(LOGO_ICO)
@@ -2800,6 +2825,7 @@ class AccountingApp:
         style.configure("Titlebar.TFrame", background=THEME["titlebar"])
         style.configure("TitlebarAccent.TFrame", background=THEME["cyan_dark"])
         style.configure("Titlebar.TLabel", background=THEME["titlebar"], foreground=THEME["text"], font=("Microsoft YaHei UI", 10, "bold"))
+        style.configure("WindowShell.TFrame", background=THEME["window_border"])
         style.configure(
             "Chrome.TButton",
             background=THEME["titlebar"],
@@ -3088,7 +3114,9 @@ class AccountingApp:
     def _build_ui(self) -> None:
         compact = self._layout_compact
         ultra_compact = self._window_width < 960
-        outer = ttk.Frame(self.root, padding=0, style="App.TFrame")
+        shell = ttk.Frame(self.root, padding=2, style="WindowShell.TFrame")
+        shell.pack(fill="both", expand=True)
+        outer = ttk.Frame(shell, padding=0, style="App.TFrame")
         outer.pack(fill="both", expand=True)
 
         header = ttk.Frame(outer, style="App.TFrame")
@@ -3276,10 +3304,31 @@ class AccountingApp:
         self.post(f"本地 SHA256：{actual_sha}")
         if info.get("sha256"):
             self.post("SHA256 校验通过。", "success")
+        self.post_progress(91, "下载更新", "启动前自检")
+        self._verify_downloaded_update(target)
         launcher = write_update_launcher(target, current_exe, os.getpid(), config_dir() / "updates")
         self.post_progress(96, "下载更新", "准备替换")
         self.post(f"更新器：{launcher}")
         self.root.after(0, lambda path=launcher: self._confirm_apply_update(path))
+
+    def _verify_downloaded_update(self, target: Path) -> None:
+        creationflags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+        try:
+            completed = subprocess.run(
+                [str(target), "--self-test"],
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+                timeout=25,
+                creationflags=creationflags,
+            )
+        except subprocess.TimeoutExpired as exc:
+            raise RuntimeError("新版本启动自检超时，已取消替换；这通常说明 EXE 运行库或系统环境仍有问题。") from exc
+        if completed.returncode != 0:
+            detail = (completed.stderr or completed.stdout or "").strip()
+            raise RuntimeError("新版本启动自检失败，已取消替换。" + (f"\n{detail}" if detail else ""))
+        self.post("新版本启动自检通过。", "success")
 
     def _confirm_apply_update(self, launcher: Path) -> None:
         message = "新版已经下载完成。现在重启软件并替换为新版？\n\n旧版会备份到程序旁边的“更新备份”文件夹。"

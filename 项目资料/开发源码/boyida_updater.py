@@ -446,10 +446,10 @@ def write_update_launcher(new_exe: Path, current_exe: Path, pid: int, script_dir
         "  goto wait_loop",
         ")",
         'if not exist "%SRC%" exit /b 2',
-        'mkdir "%BACKUPDIR%" 2>nul',
-        'if exist "%DST%" copy /Y "%DST%" "%BACKUP%" >nul',
-        'copy /Y "%SRC%" "%DST%" >nul',
+        "echo 正在校验并替换新版本...",
+        "powershell -NoProfile -ExecutionPolicy Bypass -Command \"$ErrorActionPreference='Stop'; New-Item -ItemType Directory -LiteralPath $env:BACKUPDIR -Force | Out-Null; if (Test-Path -LiteralPath $env:DST) { Copy-Item -LiteralPath $env:DST -Destination $env:BACKUP -Force }; Copy-Item -LiteralPath $env:SRC -Destination $env:DST -Force; $srcHash=(Get-FileHash -LiteralPath $env:SRC -Algorithm SHA256).Hash; $dstHash=(Get-FileHash -LiteralPath $env:DST -Algorithm SHA256).Hash; if ($srcHash -ne $dstHash) { throw 'hash mismatch after update copy' }; Start-Sleep -Seconds 2\"",
         "if errorlevel 1 exit /b 3",
+        "timeout /t 2 /nobreak >nul",
         'start "" "%DST%"',
         'del "%~f0"',
     ]

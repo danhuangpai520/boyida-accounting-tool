@@ -6,12 +6,11 @@ def build_left_panel(app, workbench, compact: bool, ultra_compact: bool) -> None
     panel_pad = (8 if compact else 10, 10 if compact else 12, 8 if compact else 10, 6 if compact else 8)
     status_gap = (2, 4 if compact else 6)
     path_gap = (0, 8 if compact else 10)
-    button_gap = 5 if compact else 6
-    primary_gap = (4 if compact else 5, 5 if compact else 6)
-    action_gap = 5 if compact else 6
-    update_gap = (8 if compact else 10, 0)
-    spacer_height = 8 if compact else 10
-    batch_ipady = 2 if compact else 3
+    button_gap = 7 if compact else 8
+    primary_gap = (0, button_gap)
+    action_gap = (0, button_gap)
+    update_gap = (0, 0)
+    batch_ipady = 3 if compact else 4
     primary_ipady = batch_ipady
     left_panel = ttk.LabelFrame(
         workbench,
@@ -21,18 +20,16 @@ def build_left_panel(app, workbench, compact: bool, ultra_compact: bool) -> None
     )
     left_panel.grid(row=0, column=0, sticky="nsew", padx=(0, 8 if compact else 10))
     left_panel.columnconfigure(0, weight=1)
-    left_panel.rowconfigure(0, weight=1)
-    left_panel.rowconfigure(2, weight=1)
+    left_panel.rowconfigure(0, weight=0)
 
     left_content = ttk.Frame(left_panel, style="Panel.TFrame")
-    left_content.grid(row=1, column=0, sticky="ew")
+    left_content.grid(row=0, column=0, sticky="new")
     left_content.columnconfigure(0, weight=1)
     ttk.Label(left_content, textvariable=app.input_status, style="BatchStatus.TLabel").grid(row=0, column=0, sticky="ew", pady=status_gap)
     ttk.Label(left_content, textvariable=app.output_status, style="BatchPath.TLabel").grid(row=1, column=0, sticky="ew", pady=path_gap)
     ttk.Button(left_content, text="导入图片", command=app._choose_image_dir, style="Batch.TButton").grid(row=2, column=0, sticky="ew", pady=(0, button_gap), ipady=batch_ipady)
-    ttk.Frame(left_content, height=spacer_height, style="Panel.TFrame").grid(row=3, column=0, sticky="ew")
     ttk.Button(left_content, text="一键出表", command=app.run_all, style="BatchPrimary.TButton").grid(
-        row=4,
+        row=3,
         column=0,
         sticky="ew",
         pady=primary_gap,
@@ -40,7 +37,7 @@ def build_left_panel(app, workbench, compact: bool, ultra_compact: bool) -> None
     )
 
     action_grid = ttk.Frame(left_content, style="Panel.TFrame")
-    action_grid.grid(row=5, column=0, sticky="ew")
+    action_grid.grid(row=4, column=0, sticky="ew", pady=(0, button_gap))
     action_grid.columnconfigure(0, weight=1)
     action_grid.columnconfigure(1, weight=1)
     action_buttons = [
@@ -57,11 +54,11 @@ def build_left_panel(app, workbench, compact: bool, ultra_compact: bool) -> None
             column=column,
                 sticky="ew",
                 padx=(0, 4) if column == 0 else (4, 0),
-                pady=action_gap,
+                pady=(0, button_gap) if row == 0 else (0, 0),
                 ipady=batch_ipady,
             )
     ttk.Button(left_content, text="检查更新", command=app.check_for_updates, style="Batch.TButton").grid(
-        row=6,
+        row=5,
         column=0,
         sticky="ew",
         pady=update_gap,
@@ -131,14 +128,14 @@ def build_center_panel(app, workbench, compact: bool, ultra_compact: bool, theme
 
 def build_right_panel(app, workbench, compact: bool, ultra_compact: bool, theme: dict, ocr_engine_labels: dict, ocr_profile_labels: dict) -> None:
     right_panel = ttk.Frame(workbench, style="App.TFrame")
-    right_panel.grid(row=0, column=2, sticky="nsew")
+    right_panel.grid(row=0, column=2, sticky="new")
     right_panel.columnconfigure(0, weight=1)
-    right_panel.rowconfigure(1, weight=1)
+    right_panel.rowconfigure(1, weight=0)
 
     telemetry = ttk.LabelFrame(right_panel, text="车队遥测", style="Panel.TLabelframe", padding=(8, 8))
     telemetry.grid(row=0, column=0, sticky="ew")
     route_width = 260 if ultra_compact else (288 if compact else 310)
-    route_height = 124 if compact else 132
+    route_height = 112 if compact else 118
     app.route_canvas = Canvas(telemetry, width=route_width, height=route_height, bg=theme["log"], highlightthickness=0, cursor="hand2")
     app.route_canvas.pack(fill="x")
     app.route_canvas.bind("<Button-1>", lambda _event: app.refresh_gps())
@@ -146,16 +143,16 @@ def build_right_panel(app, workbench, compact: bool, ultra_compact: bool, theme:
     app._draw_route_panel(app.route_canvas)
 
     ocr_panel = ttk.LabelFrame(right_panel, text="OCR 控制", style="Panel.TLabelframe", padding=(8 if compact else 9, 6 if compact else 7))
-    ocr_panel.grid(row=1, column=0, sticky="nsew", pady=(8 if compact else 10, 0))
+    ocr_panel.grid(row=1, column=0, sticky="ew", pady=(5 if compact else 6, 0))
     ocr_panel.columnconfigure(0, weight=1)
     ttk.Label(ocr_panel, text="OCR 引擎", style="PanelMuted.TLabel").grid(row=0, column=0, sticky="w")
     engine_combo = ttk.Combobox(ocr_panel, textvariable=app.ocr_engine, values=list(ocr_engine_labels.values()), state="readonly", width=30)
-    engine_combo.grid(row=1, column=0, sticky="ew", pady=(3, 6))
+    engine_combo.grid(row=1, column=0, sticky="ew", pady=(2, 5))
     ttk.Label(ocr_panel, text="OCR 档位 / 实际模型", style="PanelMuted.TLabel").grid(row=2, column=0, sticky="w")
     combo = ttk.Combobox(ocr_panel, textvariable=app.ocr_profile, values=list(ocr_profile_labels.values()), state="readonly", width=38)
-    combo.grid(row=3, column=0, sticky="ew", pady=(3, 4))
+    combo.grid(row=3, column=0, sticky="ew", pady=(2, 3))
     ttk.Checkbutton(ocr_panel, text="已有 OCR JSON 时跳过整批 OCR", variable=app.skip_ocr_if_json).grid(row=4, column=0, sticky="w", pady=(0, 6))
     ttk.Label(ocr_panel, text="ZHIPU API Key", style="PanelMuted.TLabel").grid(row=5, column=0, sticky="w")
-    ttk.Entry(ocr_panel, textvariable=app.api_key, show="*").grid(row=6, column=0, sticky="ew", pady=(3, 5))
+    ttk.Entry(ocr_panel, textvariable=app.api_key, show="*").grid(row=6, column=0, sticky="ew", pady=(2, 4))
     ttk.Checkbutton(ocr_panel, text="记住 Key（仅本机）", variable=app.remember_api_key).grid(row=7, column=0, sticky="w")
-    ttk.Label(ocr_panel, textvariable=app.api_key_source, style="PanelMuted.TLabel").grid(row=8, column=0, sticky="w", pady=(5, 0))
+    ttk.Label(ocr_panel, textvariable=app.api_key_source, style="PanelMuted.TLabel").grid(row=8, column=0, sticky="w", pady=(4, 0))

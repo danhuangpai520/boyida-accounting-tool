@@ -97,11 +97,28 @@ $KeyModuleContent = "BUILTIN_API_KEY_B64 = `"$B64`"`r`n"
 
 $PythonHome = Split-Path -Parent (Resolve-Path -LiteralPath $Python)
 $RuntimeBinaryArgs = @()
-foreach ($DllName in @("python3.dll", "python312.dll", "vcruntime140.dll", "vcruntime140_1.dll")) {
-    $DllPath = Join-Path $PythonHome $DllName
-    if (Test-Path -LiteralPath $DllPath) {
-        $RuntimeBinaryArgs += @("--add-binary", "$DllPath;.")
+$RuntimeBinarySeen = @{}
+function Add-RuntimeBinary {
+    param([string]$Path)
+    if ((Test-Path -LiteralPath $Path) -and -not $script:RuntimeBinarySeen.ContainsKey($Path)) {
+        $script:RuntimeBinarySeen[$Path] = $true
+        $script:RuntimeBinaryArgs += @("--add-binary", "$Path;.")
     }
+}
+foreach ($DllName in @("python3.dll", "python312.dll", "vcruntime140.dll", "vcruntime140_1.dll")) {
+    Add-RuntimeBinary -Path (Join-Path $PythonHome $DllName)
+}
+$System32 = Join-Path $env:WINDIR "System32"
+foreach ($DllName in @(
+    "ucrtbase.dll",
+    "msvcp140.dll",
+    "msvcp140_1.dll",
+    "msvcp140_2.dll",
+    "msvcp140_atomic_wait.dll",
+    "msvcp140_codecvt_ids.dll",
+    "concrt140.dll"
+)) {
+    Add-RuntimeBinary -Path (Join-Path $System32 $DllName)
 }
 
 & $Python -m PyInstaller --noconfirm --clean --onefile --windowed --name zhipu_accounting_tool --icon "assets\boyida_truck.ico" --add-data "assets\boyida_truck.png;assets" --add-data "assets\boyida_truck.ico;assets" --add-data "assets\jingzhe_header_line.png;assets" @RuntimeBinaryArgs zhipu_accounting_app.py
