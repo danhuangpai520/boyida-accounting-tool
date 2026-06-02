@@ -117,12 +117,12 @@ def adaptive_window_metrics(screen_w: int, screen_h: int) -> dict:
     compact = screen_w < 1280 or screen_h < 820
 
     width = min(1220, max(920, int(screen_w * 0.94)))
-    height = min(720, max(610, int(screen_h * 0.82)))
+    height = min(690, max(610, int(screen_h * 0.78)))
     width = min(width, max(720, screen_w - 24))
     height = min(height, max(540, screen_h - 56))
 
     min_width = 1080 if not compact else 860
-    min_height = 620 if not compact else 560
+    min_height = 600 if not compact else 560
     min_width = min(min_width, width)
     min_height = min(min_height, height)
 
@@ -2080,7 +2080,7 @@ def self_test() -> int:
     assert small_metrics["compact"] is True
     desktop_metrics = adaptive_window_metrics(1920, 1080)
     assert desktop_metrics["width"] == 1220
-    assert desktop_metrics["height"] == 720
+    assert desktop_metrics["height"] == 690
     assert daily_workspace_name(date(2026, 6, 2)) == "2026-06-02_保谊达做账表"
     with tempfile.TemporaryDirectory() as tmp:
         tmp_dir = Path(tmp)
@@ -2828,7 +2828,7 @@ class AccountingApp:
         canvas.delete("all")
         summary = self.gps_summary
         w = max(canvas.winfo_width(), canvas.winfo_reqwidth(), 260)
-        h = max(canvas.winfo_height(), canvas.winfo_reqheight(), 136)
+        h = max(canvas.winfo_height(), canvas.winfo_reqheight(), 118)
         canvas.create_rectangle(0, 0, w, h, fill=THEME["log"], outline=THEME["line"])
         canvas.create_rectangle(2, 2, w - 3, h - 3, outline=THEME["cyan_soft"])
         canvas.create_line(0, 0, 68, 0, fill=THEME["cyan"], width=2)
@@ -2838,8 +2838,8 @@ class AccountingApp:
         for y in range(20, h, 22):
             canvas.create_line(8, y, w - 8, y, fill=THEME["line_soft"])
         title = "GPS 实时" if summary.get("source") == "实时接口" else "GPS 快照"
-        canvas.create_text(18, 18, text=title, anchor="w", fill=THEME["cyan"], font=("Microsoft YaHei UI", 11, "bold"))
-        canvas.create_text(18, 42, text=summary.get("company", COMPANY_NAME), anchor="w", fill=THEME["muted"], font=("Microsoft YaHei UI", 9))
+        canvas.create_text(18, 16, text=title, anchor="w", fill=THEME["cyan"], font=("Microsoft YaHei UI", 10, "bold"))
+        canvas.create_text(18, 35, text=summary.get("company", COMPANY_NAME), anchor="w", fill=THEME["muted"], font=("Microsoft YaHei UI", 8))
 
         stats = [
             ("总车", summary.get("total", "-"), THEME["text"]),
@@ -2850,23 +2850,24 @@ class AccountingApp:
             ("报警", summary.get("alarm", "-"), THEME["red"]),
         ]
         card_w = max(72, (w - 36) // 3)
+        card_h = 26
         for index, (label, value, color) in enumerate(stats):
             col = index % 3
             row = index // 3
             x = 18 + col * card_w
-            y = 58 + row * 38
-            canvas.create_rectangle(x, y, x + card_w - 10, y + 30, fill=THEME["card"], outline=THEME["line"])
-            canvas.create_line(x, y, x, y + 30, fill=color, width=2)
-            canvas.create_line(x + 4, y + 29, x + 38, y + 29, fill=THEME["cyan_soft"])
-            canvas.create_text(x + 10, y + 15, text=label, anchor="w", fill=THEME["muted"], font=("Microsoft YaHei UI", 8))
-            canvas.create_text(x + card_w - 24, y + 15, text=str(value), anchor="e", fill=color, font=("Consolas", 15, "bold"))
+            y = 48 + row * 32
+            canvas.create_rectangle(x, y, x + card_w - 10, y + card_h, fill=THEME["card"], outline=THEME["line"])
+            canvas.create_line(x, y, x, y + card_h, fill=color, width=2)
+            canvas.create_line(x + 4, y + card_h - 1, x + 34, y + card_h - 1, fill=THEME["cyan_soft"])
+            canvas.create_text(x + 9, y + card_h // 2, text=label, anchor="w", fill=THEME["muted"], font=("Microsoft YaHei UI", 8))
+            canvas.create_text(x + card_w - 23, y + card_h // 2, text=str(value), anchor="e", fill=color, font=("Consolas", 14, "bold"))
         canvas.create_text(
             18,
-            min(h - 12, 136),
+            h - 10,
             text=f"{summary.get('source', '快照')}：{summary.get('updated_at', '-')}",
             anchor="w",
             fill=THEME["muted"],
-            font=("Microsoft YaHei UI", 8),
+            font=("Microsoft YaHei UI", 7),
         )
 
     def _draw_pipeline_panel(self, canvas: Canvas) -> None:
@@ -2962,7 +2963,7 @@ class AccountingApp:
             style="Panel.TLabelframe",
             padding=(10 if compact else 12, 14 if compact else 16, 10 if compact else 12, 8 if compact else 10),
         )
-        left_panel.grid(row=0, column=0, sticky="nsew", padx=(0, 8 if compact else 10))
+        left_panel.grid(row=0, column=0, sticky="new", padx=(0, 8 if compact else 10))
         left_panel.columnconfigure(0, weight=1)
         ttk.Label(left_panel, textvariable=self.input_status, style="Panel.TLabel").grid(row=0, column=0, sticky="ew", pady=(2, 4))
         ttk.Label(left_panel, textvariable=self.output_status, style="PanelMuted.TLabel").grid(row=1, column=0, sticky="ew", pady=(0, 10))
@@ -3035,7 +3036,7 @@ class AccountingApp:
         self.progress_log_text = Text(
             progress_log_frame,
             wrap="word",
-            height=8 if compact else 9,
+            height=7 if compact else 8,
             bg=THEME["log"],
             fg=THEME["muted"],
             insertbackground=THEME["cyan"],
@@ -3045,9 +3046,9 @@ class AccountingApp:
             padx=8,
             pady=6,
             state="disabled",
-            font=("Consolas", 8),
+            font=("Consolas", 10),
         )
-        self.progress_log_text.tag_configure("section", foreground=THEME["cyan"], font=("Microsoft YaHei UI", 9, "bold"))
+        self.progress_log_text.tag_configure("section", foreground=THEME["cyan"], font=("Microsoft YaHei UI", 10, "bold"))
         self.progress_log_text.tag_configure("success", foreground=THEME["green"])
         self.progress_log_text.tag_configure("error", foreground="#ffd1d8", background="#3a0d16")
         progress_scroll = ttk.Scrollbar(progress_log_frame, orient="vertical", command=self.progress_log_text.yview)
@@ -3063,7 +3064,7 @@ class AccountingApp:
         telemetry = ttk.LabelFrame(right_panel, text="车队遥测", style="Panel.TLabelframe", padding=(8, 8))
         telemetry.grid(row=0, column=0, sticky="ew")
         route_width = 260 if ultra_compact else (288 if compact else 310)
-        route_height = 116 if compact else 124
+        route_height = 124 if compact else 132
         self.route_canvas = Canvas(telemetry, width=route_width, height=route_height, bg=THEME["log"], highlightthickness=0, cursor="hand2")
         self.route_canvas.pack(fill="x")
         self.route_canvas.bind("<Button-1>", lambda _event: self.refresh_gps())
@@ -3919,7 +3920,7 @@ def startup_smoke_test() -> int:
             assert label in texts, label
         assert "□" in texts
         assert "Excel 设置" not in texts
-        assert int(app.progress_log_text.cget("height")) <= 9
+        assert int(app.progress_log_text.cget("height")) <= 8
         assert "执行日志" not in texts
         assert app.pipeline_canvas.winfo_reqheight() <= 168
         assert float(app.progress_value.get()) == 0.0
