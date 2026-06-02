@@ -2918,9 +2918,8 @@ class AccountingApp:
         if self.jingzhe_header_image is not None:
             image_y = max(0, (h - self.jingzhe_header_image.height()) // 2)
             canvas.create_image(18, image_y, image=self.jingzhe_header_image, anchor="nw")
-            canvas.create_text(150, h - 16, text="JINGZHE", anchor="e", fill=THEME["muted"], font=("Consolas", 8, "bold"))
         else:
-            canvas.create_text(30, h // 2, text="JINGZHE EV", anchor="w", fill=THEME["muted"], font=("Consolas", 10, "bold"))
+            canvas.create_text(30, h // 2, text="重卡线稿", anchor="w", fill=THEME["muted"], font=("Microsoft YaHei UI", 10, "bold"))
 
         title = f"{COMPANY_NAME} 运输单据做账工具"
         canvas.create_text(w // 2 + 2, h // 2 + 3, text=title, fill="#00111f", font=("Microsoft YaHei UI", 27, "bold"))
