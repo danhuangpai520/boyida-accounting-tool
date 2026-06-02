@@ -2878,33 +2878,33 @@ class AccountingApp:
         for y in (18, h - 20):
             canvas.create_line(12, y, w - 12, y, fill=THEME["line_soft"])
 
-        truck_w = min(720, int(w * 0.74))
-        truck_h = 52
-        x = (w - truck_w) // 2
-        y = max(14, (h - truck_h) // 2 + 4)
-        trailer_w = int(truck_w * 0.58)
-        cab_w = int(truck_w * 0.20)
-        base_y = y + truck_h - 9
-        line = THEME["cyan_dark"]
+        line = "#d8f7ff"
+        cyan = THEME["cyan_dark"]
         soft = THEME["line"]
-
-        canvas.create_line(x, base_y, x + truck_w, base_y, fill=soft, width=2)
-        canvas.create_rectangle(x + 24, y + 5, x + trailer_w, base_y - 8, outline=line, width=2)
-        for offset in range(72, trailer_w - 20, 92):
-            canvas.create_line(x + offset, y + 8, x + offset, base_y - 10, fill=THEME["line_soft"])
-        cab_x = x + trailer_w + 12
-        canvas.create_line(cab_x, base_y - 8, cab_x + cab_w - 28, base_y - 8, fill=line, width=2)
-        canvas.create_line(cab_x + cab_w - 28, base_y - 8, cab_x + cab_w, base_y, fill=line, width=2)
-        canvas.create_line(cab_x, base_y - 8, cab_x + 18, y + 10, fill=line, width=2)
-        canvas.create_line(cab_x + 18, y + 10, cab_x + cab_w - 28, y + 10, fill=line, width=2)
-        canvas.create_line(cab_x + cab_w - 45, y + 12, cab_x + cab_w - 20, base_y - 11, fill=THEME["cyan_soft"], width=2)
-        canvas.create_rectangle(cab_x + 24, base_y - 26, cab_x + cab_w - 58, base_y - 14, outline=THEME["line"], width=1)
-        canvas.create_text(cab_x + 42, base_y - 20, text="EV", anchor="w", fill=THEME["cyan_dark"], font=("Consolas", 10, "bold"))
-        for wheel_x in (x + 86, x + trailer_w - 72, cab_x + cab_w - 46):
-            canvas.create_oval(wheel_x - 12, base_y - 12, wheel_x + 12, base_y + 12, outline=THEME["line"], width=2)
-            canvas.create_oval(wheel_x - 5, base_y - 5, wheel_x + 5, base_y + 5, outline=THEME["cyan_soft"], width=1)
-        canvas.create_line(x - 24, base_y + 18, x + truck_w + 44, base_y + 18, fill=THEME["line_soft"])
-        canvas.create_line(x + 40, base_y + 24, x + truck_w - 90, base_y + 24, fill=THEME["line_soft"])
+        dim = THEME["line_soft"]
+        x = 34
+        y = max(13, (h - 68) // 2 + 4)
+        front = [x + 18, y + 15, x + 92, y + 9, x + 110, y + 56, x + 25, y + 62]
+        side = [x + 92, y + 9, x + 184, y + 18, x + 205, y + 54, x + 110, y + 56]
+        roof = [x + 32, y + 9, x + 94, y + 2, x + 184, y + 18, x + 92, y + 9]
+        canvas.create_polygon(side, fill="", outline=soft, width=2)
+        canvas.create_polygon(front, fill="", outline=line, width=2)
+        canvas.create_polygon(roof, fill="", outline=cyan, width=2)
+        canvas.create_polygon(x + 34, y + 21, x + 82, y + 17, x + 93, y + 40, x + 42, y + 45, fill="", outline=line, width=2)
+        canvas.create_polygon(x + 112, y + 23, x + 154, y + 27, x + 164, y + 45, x + 120, y + 45, fill="", outline=cyan, width=2)
+        canvas.create_line(x + 49, y + 52, x + 103, y + 49, fill=line, width=2)
+        canvas.create_line(x + 36, y + 55, x + 106, y + 51, fill=soft, width=1)
+        canvas.create_line(x + 119, y + 53, x + 193, y + 50, fill=soft, width=2)
+        canvas.create_line(x + 172, y + 24, x + 196, y + 47, fill=cyan, width=2)
+        for offset in (0, 10, 20):
+            canvas.create_line(x + 44, y + 31 + offset, x + 92, y + 28 + offset, fill=dim)
+        for wheel_x, wheel_y in ((x + 62, y + 62), (x + 158, y + 60)):
+            canvas.create_oval(wheel_x - 13, wheel_y - 13, wheel_x + 13, wheel_y + 13, outline=line, width=2)
+            canvas.create_oval(wheel_x - 6, wheel_y - 6, wheel_x + 6, wheel_y + 6, outline=cyan, width=1)
+        canvas.create_line(x + 2, y + 75, x + 232, y + 68, fill=dim)
+        canvas.create_text(x + 226, y + 20, text="JINGZHE EV", anchor="e", fill=THEME["muted"], font=("Consolas", 8, "bold"))
+        for px, py in ((x + 212, y + 32), (x + 222, y + 36), (x + 232, y + 40), (x + 220, y + 52)):
+            canvas.create_rectangle(px, py, px + 3, py + 3, fill=cyan, outline="")
 
         title = f"{COMPANY_NAME} 运输单据做账工具"
         canvas.create_text(w // 2 + 2, h // 2 + 3, text=title, fill="#00111f", font=("Microsoft YaHei UI", 27, "bold"))
