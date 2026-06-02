@@ -7,12 +7,12 @@ def build_left_panel(app, workbench, compact: bool, ultra_compact: bool) -> None
     status_gap = (2, 4 if compact else 6)
     path_gap = (0, 8 if compact else 10)
     button_gap = 5 if compact else 6
-    primary_gap = (6 if compact else 8, 8 if compact else 10)
+    primary_gap = (4 if compact else 5, 5 if compact else 6)
     action_gap = 5 if compact else 6
     update_gap = (8 if compact else 10, 0)
     spacer_height = 8 if compact else 10
     batch_ipady = 2 if compact else 3
-    primary_ipady = 4 if compact else 5
+    primary_ipady = batch_ipady
     left_panel = ttk.LabelFrame(
         workbench,
         text="批次与操作",

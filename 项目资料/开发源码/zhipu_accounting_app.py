@@ -47,7 +47,7 @@ except Exception:
 
 COMPANY_NAME = "保谊达"
 APP_TITLE = f"{COMPANY_NAME}车队做账工具"
-APP_VERSION = "2.0"
+APP_VERSION = "2.1"
 IMAGE_SUFFIXES = {".jpg", ".jpeg", ".png", ".bmp", ".webp"}
 HEADERS = ["日期", "车号", "驾驶员", "重量", "货物名称", "装货地", "收货地", "备注", "原图"]
 OCR_ENGINE_LABELS = {
@@ -2126,7 +2126,8 @@ def find_best_paddle_environment(preferred_python: str = "", log_fn=None) -> tup
 
 
 def self_test() -> int:
-    assert APP_VERSION == "2.0"
+    assert APP_VERSION == "2.1"
+    assert is_newer_version("v2.1", "2.0")
     assert is_newer_version("v2.0", "1.9")
     assert not is_newer_version("v1.10", "2.0")
     assert is_newer_version("v1.6", "1.5")
@@ -2920,8 +2921,8 @@ class AccountingApp:
             background="#0089a8",
             foreground="#ecfeff",
             bordercolor=THEME["cyan"],
-            padding=(16, 12),
-            font=("Microsoft YaHei UI", 12, "bold"),
+            padding=(12, 10),
+            font=("Microsoft YaHei UI", 10, "bold"),
         )
         style.map(
             "BatchPrimary.TButton",
@@ -3085,28 +3086,24 @@ class AccountingApp:
         canvas.create_text(w - 18, footer_y, text="READY", anchor="e", fill=THEME["green"], font=("Consolas", 11, "bold"))
 
     def _build_ui(self) -> None:
-        chrome = ttk.Frame(self.root, padding=(10, 5), style="Titlebar.TFrame")
-        chrome.pack(fill="x")
-        chrome.bind("<ButtonPress-1>", self._start_window_drag)
-        chrome.bind("<B1-Motion>", self._drag_window)
-        ttk.Button(chrome, text="X", command=self.root.destroy, style="Close.TButton", width=3).pack(side="right")
-        ttk.Button(chrome, text="□", command=self._toggle_maximize_window, style="Chrome.TButton", width=3).pack(side="right", padx=(4, 0))
-        ttk.Button(chrome, text="-", command=self._minimize_window, style="Chrome.TButton", width=3).pack(side="right", padx=(4, 0))
-        ttk.Frame(self.root, height=2, style="TitlebarAccent.TFrame").pack(fill="x")
-
         compact = self._layout_compact
         ultra_compact = self._window_width < 960
-        outer = ttk.Frame(self.root, padding=(8 if compact else 12), style="App.TFrame")
+        outer = ttk.Frame(self.root, padding=0, style="App.TFrame")
         outer.pack(fill="both", expand=True)
 
         header = ttk.Frame(outer, style="App.TFrame")
         header.pack(fill="x", pady=(0, 8 if compact else 10))
+        header.bind("<ButtonPress-1>", self._start_window_drag)
+        header.bind("<B1-Motion>", self._drag_window)
 
         header_height = 82 if compact else 92
         self.header_canvas = Canvas(header, height=header_height, bg=THEME["bg"], highlightthickness=0)
         self.header_canvas.pack(fill="x")
         self.header_canvas.bind("<Configure>", lambda _event: self._draw_header_panel(self.header_canvas))
+        self.header_canvas.bind("<ButtonPress-1>", self._start_window_drag)
+        self.header_canvas.bind("<B1-Motion>", self._drag_window)
         self._draw_header_panel(self.header_canvas)
+        self._build_window_controls(header)
 
         workbench = ttk.Frame(outer, style="App.TFrame")
         workbench.pack(side="top", fill="both", expand=True)
@@ -3123,6 +3120,13 @@ class AccountingApp:
 
         self.log("已启动。放入图片后直接点“一键出表”。")
         self.log(f"当前版本：v{APP_VERSION}")
+
+    def _build_window_controls(self, parent: ttk.Frame) -> None:
+        controls = ttk.Frame(parent, style="App.TFrame")
+        controls.place(relx=1.0, x=-8, y=8, anchor="ne")
+        ttk.Button(controls, text="-", command=self._minimize_window, style="Chrome.TButton", width=3).pack(side="left", padx=(0, 4))
+        ttk.Button(controls, text="□", command=self._toggle_maximize_window, style="Chrome.TButton", width=3).pack(side="left", padx=(0, 4))
+        ttk.Button(controls, text="X", command=self.root.destroy, style="Close.TButton", width=3).pack(side="left")
 
     def _path_row(self, parent: ttk.Frame, row: int, label: str, var: StringVar, command) -> None:
         ttk.Label(parent, text=label, width=16, style="Panel.TLabel").grid(row=row, column=0, sticky="w", pady=4)

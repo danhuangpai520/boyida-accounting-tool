@@ -94,7 +94,17 @@ $KeyModuleContent = "BUILTIN_API_KEY_B64 = `"$B64`"`r`n"
 
 & $Python -m py_compile "zhipu_accounting_app.py"
 & $Python "zhipu_accounting_app.py" --self-test
-& $Python -m PyInstaller --noconfirm --clean --onefile --windowed --name zhipu_accounting_tool --icon "assets\boyida_truck.ico" --add-data "assets\boyida_truck.png;assets" --add-data "assets\boyida_truck.ico;assets" --add-data "assets\jingzhe_header_line.png;assets" zhipu_accounting_app.py
+
+$PythonHome = Split-Path -Parent (Resolve-Path -LiteralPath $Python)
+$RuntimeBinaryArgs = @()
+foreach ($DllName in @("python3.dll", "python312.dll", "vcruntime140.dll", "vcruntime140_1.dll")) {
+    $DllPath = Join-Path $PythonHome $DllName
+    if (Test-Path -LiteralPath $DllPath) {
+        $RuntimeBinaryArgs += @("--add-binary", "$DllPath;.")
+    }
+}
+
+& $Python -m PyInstaller --noconfirm --clean --onefile --windowed --name zhipu_accounting_tool --icon "assets\boyida_truck.ico" --add-data "assets\boyida_truck.png;assets" --add-data "assets\boyida_truck.ico;assets" --add-data "assets\jingzhe_header_line.png;assets" @RuntimeBinaryArgs zhipu_accounting_app.py
 
 Copy-Item -LiteralPath "dist\zhipu_accounting_tool.exe" -Destination $OutputExe -Force
 
