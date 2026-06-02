@@ -2676,6 +2676,8 @@ class AccountingApp:
         style.configure("Panel.TLabel", background=THEME["panel"], foreground=THEME["text"])
         style.configure("Muted.TLabel", background=THEME["bg"], foreground=THEME["muted"])
         style.configure("PanelMuted.TLabel", background=THEME["panel"], foreground=THEME["muted"])
+        style.configure("BatchStatus.TLabel", background=THEME["panel"], foreground=THEME["text"], font=("Microsoft YaHei UI", 12, "bold"))
+        style.configure("BatchPath.TLabel", background=THEME["panel"], foreground=THEME["cyan"], font=("Microsoft YaHei UI", 11, "bold"))
         style.configure("Title.TLabel", background=THEME["bg"], foreground=THEME["text"], font=("Microsoft YaHei UI", 27, "bold"))
         style.configure("ProgressPercent.TLabel", background=THEME["panel"], foreground=THEME["green"], font=("Consolas", 20, "bold"))
         style.configure("Guide.TLabel", background=THEME["bg"], foreground=THEME["green"], font=("Microsoft YaHei UI", 12, "bold"))
@@ -2771,6 +2773,22 @@ class AccountingApp:
             bordercolor=[("focus", THEME["cyan"]), ("active", THEME["cyan_dark"])],
         )
         style.configure(
+            "Batch.TButton",
+            background=THEME["panel_2"],
+            foreground=THEME["text"],
+            bordercolor=THEME["line"],
+            focusthickness=1,
+            focuscolor=THEME["cyan_dark"],
+            padding=(12, 10),
+            font=("Microsoft YaHei UI", 10, "bold"),
+        )
+        style.map(
+            "Batch.TButton",
+            background=[("active", THEME["panel_3"]), ("pressed", "#05101c")],
+            foreground=[("active", THEME["cyan"])],
+            bordercolor=[("focus", THEME["cyan"]), ("active", THEME["cyan_dark"])],
+        )
+        style.configure(
             "Primary.TButton",
             background="#007fa8",
             foreground="#ecfeff",
@@ -2780,6 +2798,19 @@ class AccountingApp:
         )
         style.map(
             "Primary.TButton",
+            background=[("active", "#00a8d4"), ("pressed", "#045a78")],
+            foreground=[("active", "#ffffff")],
+        )
+        style.configure(
+            "BatchPrimary.TButton",
+            background="#0089a8",
+            foreground="#ecfeff",
+            bordercolor=THEME["cyan"],
+            padding=(16, 12),
+            font=("Microsoft YaHei UI", 12, "bold"),
+        )
+        style.map(
+            "BatchPrimary.TButton",
             background=[("active", "#00a8d4"), ("pressed", "#045a78")],
             foreground=[("active", "#ffffff")],
         )
@@ -2823,6 +2854,51 @@ class AccountingApp:
             darkcolor=THEME["cyan_dark"],
             thickness=16,
         )
+
+    def _draw_header_panel(self, canvas: Canvas) -> None:
+        canvas.delete("all")
+        w = max(canvas.winfo_width(), self._window_width - 24, 900)
+        h = max(canvas.winfo_height(), 82)
+        canvas.create_rectangle(0, 0, w, h, fill=THEME["bg"], outline="")
+        canvas.create_rectangle(0, 0, w, h, fill=THEME["log"], outline=THEME["line_soft"])
+        canvas.create_line(0, 0, 168, 0, fill=THEME["cyan_dark"], width=2)
+        canvas.create_line(w - 220, h - 1, w, h - 1, fill=THEME["green"], width=2)
+        for x in range(24, w, 48):
+            canvas.create_line(x, 8, x, h - 8, fill=THEME["line_soft"])
+        for y in (18, h - 20):
+            canvas.create_line(12, y, w - 12, y, fill=THEME["line_soft"])
+
+        truck_w = min(720, int(w * 0.74))
+        truck_h = 52
+        x = (w - truck_w) // 2
+        y = max(14, (h - truck_h) // 2 + 4)
+        trailer_w = int(truck_w * 0.58)
+        cab_w = int(truck_w * 0.20)
+        base_y = y + truck_h - 9
+        line = THEME["cyan_dark"]
+        soft = THEME["line"]
+
+        canvas.create_line(x, base_y, x + truck_w, base_y, fill=soft, width=2)
+        canvas.create_rectangle(x + 24, y + 5, x + trailer_w, base_y - 8, outline=line, width=2)
+        for offset in range(72, trailer_w - 20, 92):
+            canvas.create_line(x + offset, y + 8, x + offset, base_y - 10, fill=THEME["line_soft"])
+        cab_x = x + trailer_w + 12
+        canvas.create_line(cab_x, base_y - 8, cab_x + cab_w - 28, base_y - 8, fill=line, width=2)
+        canvas.create_line(cab_x + cab_w - 28, base_y - 8, cab_x + cab_w, base_y, fill=line, width=2)
+        canvas.create_line(cab_x, base_y - 8, cab_x + 18, y + 10, fill=line, width=2)
+        canvas.create_line(cab_x + 18, y + 10, cab_x + cab_w - 28, y + 10, fill=line, width=2)
+        canvas.create_line(cab_x + cab_w - 45, y + 12, cab_x + cab_w - 20, base_y - 11, fill=THEME["cyan_soft"], width=2)
+        canvas.create_rectangle(cab_x + 24, base_y - 26, cab_x + cab_w - 58, base_y - 14, outline=THEME["line"], width=1)
+        canvas.create_text(cab_x + 42, base_y - 20, text="EV", anchor="w", fill=THEME["cyan_dark"], font=("Consolas", 10, "bold"))
+        for wheel_x in (x + 86, x + trailer_w - 72, cab_x + cab_w - 46):
+            canvas.create_oval(wheel_x - 12, base_y - 12, wheel_x + 12, base_y + 12, outline=THEME["line"], width=2)
+            canvas.create_oval(wheel_x - 5, base_y - 5, wheel_x + 5, base_y + 5, outline=THEME["cyan_soft"], width=1)
+        canvas.create_line(x - 24, base_y + 18, x + truck_w + 44, base_y + 18, fill=THEME["line_soft"])
+        canvas.create_line(x + 40, base_y + 24, x + truck_w - 90, base_y + 24, fill=THEME["line_soft"])
+
+        title = f"{COMPANY_NAME} 运输单据做账工具"
+        canvas.create_text(w // 2 + 2, h // 2 + 3, text=title, fill="#00111f", font=("Microsoft YaHei UI", 27, "bold"))
+        canvas.create_text(w // 2, h // 2 + 1, text=title, fill=THEME["text"], font=("Microsoft YaHei UI", 27, "bold"))
 
     def _draw_route_panel(self, canvas: Canvas) -> None:
         canvas.delete("all")
@@ -2938,15 +3014,11 @@ class AccountingApp:
         header = ttk.Frame(outer, style="App.TFrame")
         header.pack(fill="x", pady=(0, 8 if compact else 10))
 
-        brand_row = ttk.Frame(header, style="App.TFrame")
-        brand_row.pack(fill="x")
-        title = ttk.Label(
-            brand_row,
-            text=f"{COMPANY_NAME} 运输单据做账工具",
-            style="Title.TLabel",
-            anchor="center",
-        )
-        title.pack(fill="x", pady=(1, 3))
+        header_height = 82 if compact else 92
+        self.header_canvas = Canvas(header, height=header_height, bg=THEME["bg"], highlightthickness=0)
+        self.header_canvas.pack(fill="x")
+        self.header_canvas.bind("<Configure>", lambda _event: self._draw_header_panel(self.header_canvas))
+        self._draw_header_panel(self.header_canvas)
 
         workbench = ttk.Frame(outer, style="App.TFrame")
         workbench.pack(side="top", fill="both", expand=True)
@@ -2970,18 +3042,18 @@ class AccountingApp:
         left_content = ttk.Frame(left_panel, style="Panel.TFrame")
         left_content.grid(row=1, column=0, sticky="ew")
         left_content.columnconfigure(0, weight=1)
-        ttk.Label(left_content, textvariable=self.input_status, style="Panel.TLabel").grid(row=0, column=0, sticky="ew", pady=(2, 4))
-        ttk.Label(left_content, textvariable=self.output_status, style="PanelMuted.TLabel").grid(row=1, column=0, sticky="ew", pady=(0, 10))
-        ttk.Button(left_content, text="导入图片", command=self._choose_image_dir, style="Tool.TButton").grid(row=2, column=0, sticky="ew", pady=4, ipady=2)
-        ttk.Button(left_content, text="待处理图片", command=self.open_image_dir, style="Tool.TButton").grid(row=3, column=0, sticky="ew", pady=4, ipady=2)
+        ttk.Label(left_content, textvariable=self.input_status, style="BatchStatus.TLabel").grid(row=0, column=0, sticky="ew", pady=(4, 8))
+        ttk.Label(left_content, textvariable=self.output_status, style="BatchPath.TLabel").grid(row=1, column=0, sticky="ew", pady=(0, 18))
+        ttk.Button(left_content, text="导入图片", command=self._choose_image_dir, style="Batch.TButton").grid(row=2, column=0, sticky="ew", pady=(0, 10), ipady=3)
+        ttk.Button(left_content, text="待处理图片", command=self.open_image_dir, style="Batch.TButton").grid(row=3, column=0, sticky="ew", pady=10, ipady=3)
 
-        ttk.Frame(left_content, height=12, style="Panel.TFrame").grid(row=4, column=0, sticky="ew")
-        ttk.Button(left_content, text="一键出表", command=self.run_all, style="Primary.TButton").grid(
+        ttk.Frame(left_content, height=18, style="Panel.TFrame").grid(row=4, column=0, sticky="ew")
+        ttk.Button(left_content, text="一键出表", command=self.run_all, style="BatchPrimary.TButton").grid(
             row=5,
             column=0,
             sticky="ew",
-            pady=(4 if compact else 5, 6 if compact else 8),
-            ipady=3 if compact else 4,
+            pady=(10, 14),
+            ipady=5,
         )
         action_grid = ttk.Frame(left_content, style="Panel.TFrame")
         action_grid.grid(row=6, column=0, sticky="ew")
@@ -2996,13 +3068,13 @@ class AccountingApp:
         for index, (text, command) in enumerate(action_buttons):
             row = index // 2
             column = index % 2
-            ttk.Button(action_grid, text=text, command=command, style="Tool.TButton").grid(
+            ttk.Button(action_grid, text=text, command=command, style="Batch.TButton").grid(
                 row=row,
                 column=column,
                 sticky="ew",
                 padx=(0, 4) if column == 0 else (4, 0),
-                pady=4,
-                ipady=2,
+                pady=8,
+                ipady=3,
             )
 
         center_panel = ttk.LabelFrame(workbench, text="流程管线", style="Panel.TLabelframe", padding=(8 if compact else 10, 8 if compact else 10))
