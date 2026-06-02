@@ -117,12 +117,12 @@ def adaptive_window_metrics(screen_w: int, screen_h: int) -> dict:
     compact = screen_w < 1280 or screen_h < 820
 
     width = min(1220, max(920, int(screen_w * 0.94)))
-    height = min(820, max(610, int(screen_h * 0.86)))
+    height = min(720, max(610, int(screen_h * 0.82)))
     width = min(width, max(720, screen_w - 24))
     height = min(height, max(540, screen_h - 56))
 
     min_width = 1080 if not compact else 860
-    min_height = 680 if not compact else 560
+    min_height = 620 if not compact else 560
     min_width = min(min_width, width)
     min_height = min(min_height, height)
 
@@ -2080,7 +2080,7 @@ def self_test() -> int:
     assert small_metrics["compact"] is True
     desktop_metrics = adaptive_window_metrics(1920, 1080)
     assert desktop_metrics["width"] == 1220
-    assert desktop_metrics["height"] == 820
+    assert desktop_metrics["height"] == 720
     assert daily_workspace_name(date(2026, 6, 2)) == "2026-06-02_保谊达做账表"
     with tempfile.TemporaryDirectory() as tmp:
         tmp_dir = Path(tmp)
@@ -2464,6 +2464,8 @@ class AccountingApp:
         self._window_height = 780
         self._normal_geometry = ""
         self._is_maximized = False
+        self._resize_mode = ""
+        self._resize_start = (0, 0, 0, 0, 0, 0)
         self._configure_initial_window()
         self.root.overrideredirect(True)
         self.logo_image: PhotoImage | None = None
@@ -2505,6 +2507,7 @@ class AccountingApp:
         self._configure_theme()
         self._set_window_icon()
         self._build_ui()
+        self._install_resize_handles()
         self.root.bind("<Map>", self._restore_borderless)
         self.root.after(150, self._drain_events)
         self.root.after(600, self.refresh_gps_on_startup)
@@ -2561,6 +2564,76 @@ class AccountingApp:
         x = event.x_root - self._drag_offset[0]
         y = event.y_root - self._drag_offset[1]
         self.root.geometry(f"+{x}+{y}")
+
+    def _start_resize(self, mode: str, event) -> None:
+        if self._is_maximized:
+            return
+        self._resize_mode = mode
+        self._resize_start = (
+            event.x_root,
+            event.y_root,
+            self.root.winfo_x(),
+            self.root.winfo_y(),
+            self.root.winfo_width(),
+            self.root.winfo_height(),
+        )
+
+    def _perform_resize(self, event) -> None:
+        if not self._resize_mode or self._is_maximized:
+            return
+        start_x, start_y, root_x, root_y, root_w, root_h = self._resize_start
+        dx = event.x_root - start_x
+        dy = event.y_root - start_y
+        min_w, min_h = self.root.minsize()
+        new_x, new_y = root_x, root_y
+        new_w, new_h = root_w, root_h
+
+        if "e" in self._resize_mode:
+            new_w = max(min_w, root_w + dx)
+        if "s" in self._resize_mode:
+            new_h = max(min_h, root_h + dy)
+        if "w" in self._resize_mode:
+            new_w = max(min_w, root_w - dx)
+            new_x = root_x + (root_w - new_w)
+        if "n" in self._resize_mode:
+            new_h = max(min_h, root_h - dy)
+            new_y = root_y + (root_h - new_h)
+
+        self.root.geometry(f"{int(new_w)}x{int(new_h)}+{int(new_x)}+{int(new_y)}")
+
+    def _finish_resize(self, _event=None) -> None:
+        self._resize_mode = ""
+        if not self._is_maximized:
+            self._normal_geometry = self.root.geometry()
+
+    def _install_resize_handles(self) -> None:
+        margin = 6
+        cursor_by_mode = {
+            "n": "sb_v_double_arrow",
+            "s": "sb_v_double_arrow",
+            "e": "sb_h_double_arrow",
+            "w": "sb_h_double_arrow",
+            "ne": "top_right_corner",
+            "nw": "top_left_corner",
+            "se": "bottom_right_corner",
+            "sw": "bottom_left_corner",
+        }
+        placements = {
+            "n": dict(x=margin, y=0, relwidth=1, width=-margin * 2, height=margin),
+            "s": dict(x=margin, rely=1, y=-margin, relwidth=1, width=-margin * 2, height=margin),
+            "e": dict(relx=1, x=-margin, y=margin, width=margin, relheight=1, height=-margin * 2),
+            "w": dict(x=0, y=margin, width=margin, relheight=1, height=-margin * 2),
+            "ne": dict(relx=1, x=-margin, y=0, width=margin, height=margin),
+            "nw": dict(x=0, y=0, width=margin, height=margin),
+            "se": dict(relx=1, rely=1, x=-margin, y=-margin, width=margin, height=margin),
+            "sw": dict(rely=1, x=0, y=-margin, width=margin, height=margin),
+        }
+        for mode, place_args in placements.items():
+            handle = ttk.Frame(self.root, style="App.TFrame", cursor=cursor_by_mode.get(mode, "sizing"))
+            handle.place(**place_args)
+            handle.bind("<ButtonPress-1>", lambda event, item=mode: self._start_resize(item, event))
+            handle.bind("<B1-Motion>", self._perform_resize)
+            handle.bind("<ButtonRelease-1>", self._finish_resize)
 
     def _minimize_window(self) -> None:
         self.root.overrideredirect(False)
@@ -2876,14 +2949,19 @@ class AccountingApp:
 
         workbench = ttk.Frame(outer, style="App.TFrame")
         workbench.pack(side="top", fill="both", expand=True)
-        left_width = 200 if ultra_compact else (220 if compact else 238)
-        right_width = 260 if ultra_compact else (292 if compact else 318)
+        left_width = 260 if ultra_compact else (292 if compact else 318)
+        right_width = left_width
         workbench.columnconfigure(0, minsize=left_width)
         workbench.columnconfigure(1, weight=1)
         workbench.columnconfigure(2, minsize=right_width)
         workbench.rowconfigure(0, weight=1)
 
-        left_panel = ttk.LabelFrame(workbench, text="批次与操作", style="Panel.TLabelframe", padding=(10 if compact else 12, 8 if compact else 10))
+        left_panel = ttk.LabelFrame(
+            workbench,
+            text="批次与操作",
+            style="Panel.TLabelframe",
+            padding=(10 if compact else 12, 14 if compact else 16, 10 if compact else 12, 8 if compact else 10),
+        )
         left_panel.grid(row=0, column=0, sticky="nsew", padx=(0, 8 if compact else 10))
         left_panel.columnconfigure(0, weight=1)
         ttk.Label(left_panel, textvariable=self.input_status, style="Panel.TLabel").grid(row=0, column=0, sticky="ew", pady=(2, 4))
@@ -2927,7 +3005,7 @@ class AccountingApp:
         center_panel.rowconfigure(1, weight=1)
         center_panel.columnconfigure(0, weight=1)
         pipeline_width = 300 if ultra_compact else (390 if compact else 470)
-        pipeline_height = 126 if ultra_compact else (132 if compact else 140)
+        pipeline_height = 116 if ultra_compact else (122 if compact else 132)
         self.pipeline_canvas = Canvas(center_panel, width=pipeline_width, height=pipeline_height, bg=THEME["log"], highlightthickness=0)
         self.pipeline_canvas.grid(row=0, column=0, sticky="ew")
         self.pipeline_canvas.bind("<Configure>", lambda _event: self._draw_pipeline_panel(self.pipeline_canvas))
@@ -2957,7 +3035,7 @@ class AccountingApp:
         self.progress_log_text = Text(
             progress_log_frame,
             wrap="word",
-            height=7 if compact else 8,
+            height=8 if compact else 9,
             bg=THEME["log"],
             fg=THEME["muted"],
             insertbackground=THEME["cyan"],
@@ -2985,7 +3063,7 @@ class AccountingApp:
         telemetry = ttk.LabelFrame(right_panel, text="车队遥测", style="Panel.TLabelframe", padding=(8, 8))
         telemetry.grid(row=0, column=0, sticky="ew")
         route_width = 260 if ultra_compact else (288 if compact else 310)
-        route_height = 124 if compact else 132
+        route_height = 116 if compact else 124
         self.route_canvas = Canvas(telemetry, width=route_width, height=route_height, bg=THEME["log"], highlightthickness=0, cursor="hand2")
         self.route_canvas.pack(fill="x")
         self.route_canvas.bind("<Button-1>", lambda _event: self.refresh_gps())
@@ -3841,7 +3919,7 @@ def startup_smoke_test() -> int:
             assert label in texts, label
         assert "□" in texts
         assert "Excel 设置" not in texts
-        assert int(app.progress_log_text.cget("height")) <= 8
+        assert int(app.progress_log_text.cget("height")) <= 9
         assert "执行日志" not in texts
         assert app.pipeline_canvas.winfo_reqheight() <= 168
         assert float(app.progress_value.get()) == 0.0
