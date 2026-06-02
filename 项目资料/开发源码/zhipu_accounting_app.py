@@ -2875,7 +2875,7 @@ class AccountingApp:
         title.pack(fill="x", pady=(0, 2))
 
         workbench = ttk.Frame(outer, style="App.TFrame")
-        workbench.pack(side="top", fill="x", expand=False, pady=(0, 8 if compact else 10))
+        workbench.pack(side="top", fill="both", expand=True)
         left_width = 200 if ultra_compact else (220 if compact else 238)
         right_width = 260 if ultra_compact else (292 if compact else 318)
         workbench.columnconfigure(0, minsize=left_width)
@@ -3007,37 +3007,6 @@ class AccountingApp:
         ttk.Checkbutton(ocr_panel, text="记住 Key（仅本机）", variable=self.remember_api_key).grid(row=7, column=0, sticky="w")
         ttk.Label(ocr_panel, textvariable=self.api_key_source, style="PanelMuted.TLabel").grid(row=8, column=0, sticky="w", pady=(5, 0))
 
-        log_frame = ttk.LabelFrame(outer, text="执行日志", style="Panel.TLabelframe", padding=(10, 8))
-        log_frame.pack(side="bottom", fill="both", expand=True, before=workbench)
-        self.log_text = Text(
-            log_frame,
-            wrap="word",
-            height=7 if compact else 8,
-            bg=THEME["log"],
-            fg=THEME["text"],
-            insertbackground=THEME["cyan"],
-            selectbackground=THEME["selected"],
-            relief="flat",
-            borderwidth=0,
-            padx=10,
-            pady=8,
-            state="disabled",
-            font=("Microsoft YaHei UI", 9),
-        )
-        self.log_text.tag_configure(
-            "section",
-            background=THEME["log_section"],
-            foreground=THEME["cyan"],
-            font=("Microsoft YaHei UI", 10, "bold"),
-            spacing1=8,
-            spacing3=5,
-        )
-        self.log_text.tag_configure("success", foreground=THEME["green"])
-        self.log_text.tag_configure("error", foreground="#ffd1d8", background="#3a0d16")
-        scroll = ttk.Scrollbar(log_frame, orient="vertical", command=self.log_text.yview)
-        self.log_text.configure(yscrollcommand=scroll.set)
-        self.log_text.pack(side="left", fill="both", expand=True)
-        scroll.pack(side="right", fill="y")
         self.log("已启动。放入图片后直接点“一键出表”。")
 
     def _path_row(self, parent: ttk.Frame, row: int, label: str, var: StringVar, command) -> None:
@@ -3231,15 +3200,8 @@ class AccountingApp:
 
     def log(self, message: str, tag: str = "") -> None:
         timestamp = time.strftime("%H:%M:%S")
-        self.log_text.configure(state="normal")
-        if tag == "section" and self._log_started:
-            self.log_text.insert(END, "\n")
-        text = f"[{timestamp}] {message}\n"
-        self.log_text.insert(END, text, tag if tag else None)
-        self.log_text.configure(state="disabled")
-        self.log_text.see(END)
-        self._log_started = True
         self._progress_log(message, tag, timestamp)
+        self._log_started = True
 
     def log_section(self, title: str) -> None:
         self.log(f"【{title}】", "section")
@@ -3652,7 +3614,7 @@ class AccountingApp:
             return paddle_state
         raise RuntimeError(
             "本地 OCR 自动安装后仍未通过检查，已停止生成。"
-            "请查看执行日志里的 pip / Paddle 错误；50 系显卡可按官方 50-series wheel 说明手动处理。"
+            "请查看中间进度日志里的 pip / Paddle 错误；50 系显卡可按官方 50-series wheel 说明手动处理。"
         )
 
     def _install_local_ocr_env_impl(self, auto: bool = False) -> None:
@@ -3879,7 +3841,8 @@ def startup_smoke_test() -> int:
             assert label in texts, label
         assert "□" in texts
         assert "Excel 设置" not in texts
-        assert int(app.log_text.cget("height")) <= 8
+        assert int(app.progress_log_text.cget("height")) <= 8
+        assert "执行日志" not in texts
         assert app.pipeline_canvas.winfo_reqheight() <= 168
         assert float(app.progress_value.get()) == 0.0
 
