@@ -49,6 +49,11 @@ function Save-VersionManifest {
     $Manifest | ConvertTo-Json -Depth 3 | Set-Content -LiteralPath $ManifestPath -Encoding UTF8
 }
 
+$Python = "C:\Users\Administrator\.cache\codex-runtimes\codex-primary-runtime\dependencies\python\python.exe"
+if (-not (Test-Path -LiteralPath $Python)) {
+    $Python = "python"
+}
+
 if (Test-Path -LiteralPath $OutputExe) {
     $OldVersionDir = Join-Path $VersionRoot "${BuildStamp}_构建前旧版"
     New-Item -ItemType Directory -Path $OldVersionDir -Force | Out-Null
@@ -58,13 +63,20 @@ if (Test-Path -LiteralPath $OutputExe) {
 
 if (Test-Path -LiteralPath $KeyFile) {
     $ApiKey = (Get-Content -LiteralPath $KeyFile -Raw -Encoding UTF8).Trim()
+} elseif (-not [string]::IsNullOrWhiteSpace($env:ZHIPU_API_KEY)) {
+    $ApiKey = $env:ZHIPU_API_KEY.Trim()
 } else {
-    $Secure = Read-Host "Paste ZHIPU API Key (hidden)" -AsSecureString
-    $Ptr = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($Secure)
-    try {
-        $ApiKey = [Runtime.InteropServices.Marshal]::PtrToStringBSTR($Ptr).Trim()
-    } finally {
-        [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($Ptr)
+    $SavedKeyB64 = & $Python -c "import base64, zhipu_accounting_app as app; key=app.load_saved_api_key().strip(); print(base64.b64encode(key.encode('utf-8')).decode('ascii') if key else '')"
+    if (-not [string]::IsNullOrWhiteSpace($SavedKeyB64)) {
+        $ApiKey = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($SavedKeyB64.Trim()))
+    } else {
+        $Secure = Read-Host "Paste ZHIPU API Key (hidden)" -AsSecureString
+        $Ptr = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($Secure)
+        try {
+            $ApiKey = [Runtime.InteropServices.Marshal]::PtrToStringBSTR($Ptr).Trim()
+        } finally {
+            [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($Ptr)
+        }
     }
 }
 
@@ -76,11 +88,6 @@ $B64 = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($ApiKey))
 $KeyModule = Join-Path $SourceRoot "embedded_default_key.py"
 $KeyModuleContent = "BUILTIN_API_KEY_B64 = `"$B64`"`r`n"
 [IO.File]::WriteAllText($KeyModule, $KeyModuleContent, [Text.UTF8Encoding]::new($false))
-
-$Python = "C:\Users\Administrator\.cache\codex-runtimes\codex-primary-runtime\dependencies\python\python.exe"
-if (-not (Test-Path -LiteralPath $Python)) {
-    $Python = "python"
-}
 
 & $Python -m py_compile "zhipu_accounting_app.py"
 & $Python "zhipu_accounting_app.py" --self-test

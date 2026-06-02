@@ -188,6 +188,7 @@ def save_json(path, data):
 
 
 def build_kwargs(profile, device):
+    is_cpu = device == "cpu"
     base = {
         "lang": "ch",
         "ocr_version": "PP-OCRv5",
@@ -195,14 +196,14 @@ def build_kwargs(profile, device):
         "use_doc_orientation_classify": True,
         "use_doc_unwarping": True,
         "use_textline_orientation": True,
-        "text_recognition_batch_size": 8,
-        "textline_orientation_batch_size": 8,
+        "text_recognition_batch_size": 2 if is_cpu else 8,
+        "textline_orientation_batch_size": 2 if is_cpu else 8,
     }
-    if profile in {"fast", "trt"}:
+    if not is_cpu and profile in {"fast", "trt"}:
         base["enable_hpi"] = True
         base["text_recognition_batch_size"] = 16
         base["textline_orientation_batch_size"] = 16
-    if profile == "trt":
+    if not is_cpu and profile == "trt":
         base["use_tensorrt"] = True
         base["precision"] = "fp16"
     return base
@@ -1003,26 +1004,27 @@ def delete_saved_gps_api_config() -> None:
 
 PADDLE_ENV_CHECK_SCRIPT = (
     "import importlib.util, sys\n"
-    "print('python=' + sys.executable)\n"
-    "print('version=' + sys.version.replace('\\n', ' '))\n"
+    "def p(value): print(value, flush=True)\n"
+    "p('python=' + sys.executable)\n"
+    "p('version=' + sys.version.replace('\\n', ' '))\n"
     "for name in ['paddleocr', 'paddle']:\n"
-    "    print(name + '=' + str(importlib.util.find_spec(name) is not None))\n"
+    "    p(name + '=' + str(importlib.util.find_spec(name) is not None))\n"
     "try:\n"
     "    import paddle\n"
-    "    print('paddle_version=' + getattr(paddle, '__version__', 'unknown'))\n"
-    "    print('cuda_compiled=' + str(paddle.is_compiled_with_cuda()))\n"
+    "    p('paddle_version=' + getattr(paddle, '__version__', 'unknown'))\n"
+    "    p('cuda_compiled=' + str(paddle.is_compiled_with_cuda()))\n"
     "    try:\n"
     "        paddle.utils.run_check()\n"
-    "        print('paddle_run_check=True')\n"
+    "        p('paddle_run_check=True')\n"
     "    except Exception as exc:\n"
-    "        print('paddle_run_check=False ' + repr(exc))\n"
+    "        p('paddle_run_check=False ' + repr(exc))\n"
     "except Exception as exc:\n"
-    "    print('paddle_import_error=' + repr(exc))\n"
+    "    p('paddle_import_error=' + repr(exc))\n"
     "try:\n"
     "    import paddleocr\n"
-    "    print('paddleocr_version=' + getattr(paddleocr, '__version__', 'unknown'))\n"
+    "    p('paddleocr_version=' + getattr(paddleocr, '__version__', 'unknown'))\n"
     "except Exception as exc:\n"
-    "    print('paddleocr_import_error=' + repr(exc))\n"
+    "    p('paddleocr_import_error=' + repr(exc))\n"
 )
 PADDLE_INSTALL_DOC_URL = "https://www.paddleocr.ai/main/en/version3.x/paddlepaddle_installation.html"
 PADDLE_GPU_CU118_INDEX = "https://www.paddlepaddle.org.cn/packages/stable/cu118/"
@@ -1151,6 +1153,32 @@ def detect_hardware() -> dict:
     return info
 
 
+def is_nvidia_gpu(gpu: dict) -> bool:
+    name = str(gpu.get("name") or "").lower()
+    return "nvidia" in name or "geforce" in name or "rtx" in name or "quadro" in name or "tesla" in name
+
+
+def nvidia_gpus(hardware: dict) -> list[dict]:
+    return [gpu for gpu in (hardware.get("gpus") or []) if is_nvidia_gpu(gpu)]
+
+
+def best_nvidia_gpu(hardware: dict) -> dict:
+    gpus = nvidia_gpus(hardware)
+    return max(gpus, key=lambda item: item.get("memory_mb") or 0) if gpus else {}
+
+
+def local_ocr_device_plan(hardware: dict) -> tuple[str, str]:
+    gpu = best_nvidia_gpu(hardware)
+    if not gpu:
+        names = [str(item.get("name") or "").strip() for item in (hardware.get("gpus") or []) if item.get("name")]
+        if names:
+            return "cpu", "未检测到可用于 Paddle GPU 的 NVIDIA 显卡；检测到：" + " / ".join(names)
+        return "cpu", "未检测到 NVIDIA 显卡；将安装并使用 CPU 版 Paddle，本地 OCR 能跑但速度较慢"
+    memory_mb = gpu.get("memory_mb") or 0
+    memory_text = f"{round(memory_mb / 1024, 1)}GB" if memory_mb else "显存未知"
+    return "gpu", f"检测到 NVIDIA 显卡：{gpu.get('name')} / {memory_text} / driver={gpu.get('driver') or '未知'}"
+
+
 def check_paddle_environment(python: str) -> dict:
     result = {
         "python": python,
@@ -1162,7 +1190,7 @@ def check_paddle_environment(python: str) -> dict:
         "run_check": False,
         "error": "",
     }
-    code, output = run_capture([python, "-c", PADDLE_ENV_CHECK_SCRIPT], timeout=45)
+    code, output = run_capture([python, "-u", "-c", PADDLE_ENV_CHECK_SCRIPT], timeout=120)
     result["returncode"] = code
     result["lines"] = [line.rstrip() for line in output.splitlines() if line.strip()]
     if code not in (0, None):
@@ -1180,7 +1208,7 @@ def check_paddle_environment(python: str) -> dict:
 
 
 def strong_local_gpu(hardware: dict) -> tuple[bool, str]:
-    gpus = hardware.get("gpus") or []
+    gpus = nvidia_gpus(hardware)
     if not gpus:
         return False, "未检测到独立 NVIDIA GPU"
     best = max(gpus, key=lambda item: item.get("memory_mb") or 0)
@@ -1193,8 +1221,7 @@ def strong_local_gpu(hardware: dict) -> tuple[bool, str]:
 
 
 def local_paddle_install_command(python: str, hardware: dict) -> tuple[str, list[str]]:
-    gpus = hardware.get("gpus") or []
-    best_gpu = max(gpus, key=lambda item: item.get("memory_mb") or 0) if gpus else {}
+    best_gpu = best_nvidia_gpu(hardware)
     gpu_name = str(best_gpu.get("name") or "")
     driver = str(best_gpu.get("driver") or "")
     py_version = python_minor_version(python)
@@ -1202,21 +1229,21 @@ def local_paddle_install_command(python: str, hardware: dict) -> tuple[str, list
     if is_50_series and py_version in PADDLE_50_SERIES_WHEELS:
         return (
             f"Windows 50 系显卡专用 PaddlePaddle wheel（Python {py_version}）",
-            [python, "-m", "pip", "install", "--upgrade", PADDLE_50_SERIES_WHEELS[py_version]],
+            [python, "-m", "pip", "install", "--upgrade", "--prefer-binary", "--timeout", "120", PADDLE_50_SERIES_WHEELS[py_version]],
         )
     if best_gpu:
         if driver and version_at_least(driver, "550.54.14"):
             return (
                 "PaddlePaddle GPU cu126 稳定包",
-                [python, "-m", "pip", "install", "--upgrade", "paddlepaddle-gpu==3.2.0", "-i", PADDLE_GPU_CU126_INDEX],
+                [python, "-m", "pip", "install", "--upgrade", "--prefer-binary", "--timeout", "120", "paddlepaddle-gpu==3.2.0", "-i", PADDLE_GPU_CU126_INDEX],
             )
         return (
             "PaddlePaddle GPU cu118 稳定包",
-            [python, "-m", "pip", "install", "--upgrade", "paddlepaddle-gpu==3.2.0", "-i", PADDLE_GPU_CU118_INDEX],
+            [python, "-m", "pip", "install", "--upgrade", "--prefer-binary", "--timeout", "120", "paddlepaddle-gpu==3.2.0", "-i", PADDLE_GPU_CU118_INDEX],
         )
     return (
         "PaddlePaddle CPU 稳定包",
-        [python, "-m", "pip", "install", "--upgrade", "paddlepaddle==3.2.0", "-i", PADDLE_CPU_INDEX],
+        [python, "-m", "pip", "install", "--upgrade", "--prefer-binary", "--timeout", "120", "paddlepaddle==3.2.0", "-i", PADDLE_CPU_INDEX],
     )
 
 
@@ -2166,6 +2193,8 @@ def self_test() -> int:
         assert "50 系" in install_label and any("paddlepaddle_gpu" in part for part in install_cmd)
     cpu_label, cpu_cmd = local_paddle_install_command(sys.executable, {"gpus": []})
     assert "CPU" in cpu_label and "paddlepaddle==3.2.0" in cpu_cmd
+    virtual_label, virtual_cmd = local_paddle_install_command(sys.executable, {"gpus": [{"name": "Microsoft Basic Render Driver", "memory_mb": 0, "driver": ""}]})
+    assert "CPU" in virtual_label and "paddlepaddle==3.2.0" in virtual_cmd
     gps_sample = [[], [{"id": "1", "plate": "浙A1"}, {"id": "2", "plate": "浙A2"}, {"id": "3", "plate": "浙A3"}], {"1": 7, "2": 3, "3": 11}]
     gps_summary = gps_state_summary(gps_sample, "测试车队")
     assert gps_summary["total"] == "3"
@@ -3623,13 +3652,17 @@ class AccountingApp:
             return images, status
 
         self.post("OCR 预检：当前选择本地 PaddleOCR，开始检查本地环境。")
-        self._ensure_local_ocr_ready(install_if_missing=True)
-        self.post("本地 PaddleOCR 环境可用。", "success")
+        paddle_state = self._ensure_local_ocr_ready(install_if_missing=True)
+        if paddle_ready(paddle_state):
+            self.post("本地 PaddleOCR 环境可用，本次会调用 GPU。", "success")
+        else:
+            self.post("本地 PaddleOCR 环境可用，本次会调用 CPU。", "success")
         return images, status
 
     def _recommend_ocr_impl(self) -> None:
         self.persist_api_key_choice()
         hardware = detect_hardware()
+        device_plan, device_summary = local_ocr_device_plan(hardware)
         self.post(f"系统：{hardware.get('system')}")
         if hardware.get("gpus"):
             for gpu in hardware["gpus"]:
@@ -3638,6 +3671,9 @@ class AccountingApp:
                 self.post(f"GPU：{gpu.get('name')} / {memory_text} / driver={gpu.get('driver') or '未知'}")
         else:
             self.post("GPU：未检测到 NVIDIA GPU")
+        self.post("本地 OCR 设备判断：" + device_summary)
+        if device_plan == "cpu":
+            self.post("如果继续选择本地 PaddleOCR，将安装/使用 CPU 版；能跑，但速度比独立显卡慢。", "section")
 
         self.post("开始扫描本机 Python，查找可用的本地 OCR 环境。")
         paddle_state, checked = find_best_paddle_environment(self.python_path.get(), self.post)
@@ -3670,7 +3706,7 @@ class AccountingApp:
         self.post("先说结论：这里会同时检查在线 OCR 条件和本地 OCR 条件。")
         self.post("在线 OCR：只需要网络 + ZHIPU API Key；不需要本地 Python/Paddle。")
         self.post("在线 Key 状态：" + ("已填写" if self.api_key.get().strip() else "未填写"))
-        self.post("本地 OCR：需要 PaddleOCR + GPU 版 PaddlePaddle + CUDA 检查通过。")
+        self.post("本地 OCR：需要 Python + PaddleOCR + PaddlePaddle；有 NVIDIA 且 GPU 检查通过时用 gpu:0，否则可用 CPU 模式。")
         paddle_state, checked = find_best_paddle_environment(self.python_path.get(), self.post)
         if paddle_state and paddle_state.get("python"):
             self.root.after(0, self.python_path.set, paddle_state["python"])
@@ -3678,6 +3714,10 @@ class AccountingApp:
         recommendation, reasons = build_ocr_recommendation(hardware, paddle_state, self.api_key.get())
         for reason in reasons:
             self.post(reason)
+        device_plan, device_summary = local_ocr_device_plan(hardware)
+        self.post("本地设备判断：" + device_summary)
+        if device_plan == "cpu":
+            self.post("结论：这台机器本地 OCR 会走 CPU，不会假装调用显卡。")
         self.post(recommendation)
         if self.selected_ocr_engine() == "glm":
             self.post("当前选择的是在线智谱 GLM-OCR，所以本地 OCR 环境不完整也不影响在线 OCR。")
@@ -3693,6 +3733,9 @@ class AccountingApp:
         self.post("运行命令：" + " ".join(cmd))
         env = os.environ.copy()
         env.setdefault("PYTHONUTF8", "1")
+        env.setdefault("PIP_DISABLE_PIP_VERSION_CHECK", "1")
+        env.setdefault("PIP_DEFAULT_TIMEOUT", "120")
+        env.setdefault("PADDLE_PDX_MODEL_SOURCE", "BOS")
         process = subprocess.Popen(
             cmd,
             stdout=subprocess.PIPE,
@@ -3765,7 +3808,10 @@ class AccountingApp:
         if paddle_basic_ready(paddle_state):
             if paddle_state and paddle_state.get("python"):
                 self.root.after(0, self.python_path.set, paddle_state["python"])
-            self.post("本地 OCR 环境已补齐并通过检查。", "success")
+            if paddle_ready(paddle_state):
+                self.post("本地 OCR 环境已补齐并通过 GPU 检查，将使用 gpu:0。", "success")
+            else:
+                self.post("本地 OCR 环境已补齐，GPU 未通过但 CPU 可用，将使用 cpu。", "success")
             return paddle_state
         raise RuntimeError(
             "本地 OCR 自动安装后仍未通过检查，已停止生成。"
@@ -3774,18 +3820,25 @@ class AccountingApp:
 
     def _install_local_ocr_env_impl(self, auto: bool = False) -> None:
         hardware = detect_hardware()
+        device_plan, device_summary = local_ocr_device_plan(hardware)
         python = self._ensure_python_for_local_ocr()
         self.root.after(0, self.python_path.set, python)
         self.post("本地 OCR 环境只用于 PaddleOCR 模式；在线 GLM-OCR 不需要安装这些依赖。")
+        self.post(device_summary)
+        if device_plan == "cpu":
+            self.post("本次会安装 CPU 版 PaddlePaddle。虚拟机或无 NVIDIA 显卡时可以跑本地 OCR，但不会调用独立显卡。", "section")
+        else:
+            self.post("本次会优先安装 GPU 版 PaddlePaddle；只有 GPU 检查通过后才会真正使用 gpu:0。", "section")
         self.post(f"本地 OCR Python：{python}")
         self.post_progress(8, "本地 OCR 安装", "准备 Python")
-        self._run_streamed_command([python, "-m", "pip", "install", "--upgrade", "pip"], "升级 pip", timeout=900)
+        self._run_streamed_command([python, "-m", "pip", "install", "--upgrade", "--prefer-binary", "--timeout", "120", "pip", "setuptools", "wheel"], "升级 pip 基础工具", timeout=900)
         self.post_progress(24, "本地 OCR 安装", "安装 PaddleOCR")
-        self._run_streamed_command([python, "-m", "pip", "install", "--upgrade", "paddleocr"], "安装 PaddleOCR", timeout=1800)
+        self._run_streamed_command([python, "-m", "pip", "install", "--upgrade", "--prefer-binary", "--timeout", "120", "paddleocr"], "安装 PaddleOCR", timeout=1800)
         install_label, paddle_cmd = local_paddle_install_command(python, hardware)
         self.post_progress(55, "本地 OCR 安装", install_label)
         self._run_streamed_command(paddle_cmd, install_label, timeout=2400)
         self.post_progress(85, "本地 OCR 安装", "验证环境")
+        self.post("正在验证 PaddleOCR / PaddlePaddle。首次导入可能较慢，请等待；虚拟机无 NVIDIA 时 GPU 未通过属于正常情况。")
         state = check_paddle_environment(python)
         for line in state.get("lines", []):
             self.post(line)
@@ -3798,7 +3851,10 @@ class AccountingApp:
             )
         self.root.after(0, self.set_ocr_engine, "paddle")
         self.post_progress(100 if not auto else 88, "本地 OCR 安装", "验证通过")
-        self.post("本地 PaddleOCR 环境安装完成并验证通过。", "success")
+        if paddle_ready(state):
+            self.post("本地 PaddleOCR GPU 环境安装完成，将使用 gpu:0。", "success")
+        else:
+            self.post("本地 PaddleOCR CPU 环境安装完成，将使用 cpu；虚拟机/无 NVIDIA 显卡时这是正确结果。", "success")
 
     def _run_ocr_impl(self, progress_base: float = 0.0, progress_span: float = 100.0) -> None:
         self.persist_api_key_choice()
@@ -3849,7 +3905,10 @@ class AccountingApp:
             device,
         ]
         self.post("运行命令：" + " ".join(cmd))
-        process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, encoding="utf-8", errors="replace")
+        env = os.environ.copy()
+        env.setdefault("PYTHONUTF8", "1")
+        env.setdefault("PADDLE_PDX_MODEL_SOURCE", "BOS")
+        process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, encoding="utf-8", errors="replace", env=env)
         assert process.stdout is not None
         for line in process.stdout:
             clean_line = line.rstrip()
