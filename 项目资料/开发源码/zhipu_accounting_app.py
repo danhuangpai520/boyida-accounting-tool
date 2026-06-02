@@ -47,7 +47,7 @@ except Exception:
 
 COMPANY_NAME = "保谊达"
 APP_TITLE = f"{COMPANY_NAME}车队做账工具"
-APP_VERSION = "1.6"
+APP_VERSION = "1.7"
 IMAGE_SUFFIXES = {".jpg", ".jpeg", ".png", ".bmp", ".webp"}
 HEADERS = ["日期", "车号", "驾驶员", "重量", "货物名称", "装货地", "收货地", "备注", "原图"]
 OCR_ENGINE_LABELS = {
@@ -2126,7 +2126,7 @@ def find_best_paddle_environment(preferred_python: str = "", log_fn=None) -> tup
 
 
 def self_test() -> int:
-    assert APP_VERSION == "1.6"
+    assert APP_VERSION == "1.7"
     assert is_newer_version("v1.10", "1.9")
     assert is_newer_version("v1.6", "1.5")
     assert not is_newer_version("v1.6", "1.6")

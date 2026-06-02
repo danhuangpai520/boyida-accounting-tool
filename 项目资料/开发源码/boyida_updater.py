@@ -96,7 +96,10 @@ def fetch_latest_release_info(current_version: str, timeout: int = 12) -> dict:
             payload = json.loads(response.read().decode("utf-8"))
     except urllib.error.HTTPError as exc:
         if exc.code == 403:
-            return fetch_latest_release_info_by_raw_version(timeout=timeout)
+            try:
+                return fetch_latest_release_info_by_redirect(timeout=timeout)
+            except Exception:
+                return fetch_latest_release_info_by_raw_version(timeout=timeout)
         if exc.code == 404:
             raise RuntimeError("GitHub 更新源不可访问；请确认仓库 Release 是否对当前电脑公开可下载。") from exc
         raise
