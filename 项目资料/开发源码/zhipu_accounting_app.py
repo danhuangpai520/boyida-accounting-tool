@@ -2887,10 +2887,9 @@ class AccountingApp:
             canvas.create_line(12, y, w - 12, y, fill=THEME["line_soft"])
 
         if self.jingzhe_header_image is not None:
-            image_y = min(0, (h - self.jingzhe_header_image.height()) // 2)
-            canvas.create_image(16, image_y, image=self.jingzhe_header_image, anchor="nw")
-            canvas.create_line(18, h - 10, 256, h - 10, fill=THEME["cyan_soft"])
-            canvas.create_text(254, h - 18, text="JINGZHE", anchor="e", fill=THEME["muted"], font=("Consolas", 8, "bold"))
+            image_y = max(0, (h - self.jingzhe_header_image.height()) // 2)
+            canvas.create_image(18, image_y, image=self.jingzhe_header_image, anchor="nw")
+            canvas.create_text(150, h - 16, text="JINGZHE", anchor="e", fill=THEME["muted"], font=("Consolas", 8, "bold"))
         else:
             canvas.create_text(30, h // 2, text="JINGZHE EV", anchor="w", fill=THEME["muted"], font=("Consolas", 10, "bold"))
 
@@ -3012,7 +3011,7 @@ class AccountingApp:
         header = ttk.Frame(outer, style="App.TFrame")
         header.pack(fill="x", pady=(0, 8 if compact else 10))
 
-        header_height = 132 if compact else 150
+        header_height = 82 if compact else 92
         self.header_canvas = Canvas(header, height=header_height, bg=THEME["bg"], highlightthickness=0)
         self.header_canvas.pack(fill="x")
         self.header_canvas.bind("<Configure>", lambda _event: self._draw_header_panel(self.header_canvas))
