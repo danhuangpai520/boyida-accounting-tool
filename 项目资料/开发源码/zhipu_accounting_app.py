@@ -2676,7 +2676,7 @@ class AccountingApp:
         style.configure("Panel.TLabel", background=THEME["panel"], foreground=THEME["text"])
         style.configure("Muted.TLabel", background=THEME["bg"], foreground=THEME["muted"])
         style.configure("PanelMuted.TLabel", background=THEME["panel"], foreground=THEME["muted"])
-        style.configure("Title.TLabel", background=THEME["bg"], foreground=THEME["text"], font=("Microsoft YaHei UI", 24, "bold"))
+        style.configure("Title.TLabel", background=THEME["bg"], foreground=THEME["text"], font=("Microsoft YaHei UI", 27, "bold"))
         style.configure("ProgressPercent.TLabel", background=THEME["panel"], foreground=THEME["green"], font=("Consolas", 20, "bold"))
         style.configure("Guide.TLabel", background=THEME["bg"], foreground=THEME["green"], font=("Microsoft YaHei UI", 12, "bold"))
         style.configure("Chip.TLabel", background=THEME["panel_3"], foreground=THEME["cyan"], padding=(10, 4), font=("Microsoft YaHei UI", 9, "bold"))
@@ -2946,7 +2946,7 @@ class AccountingApp:
             style="Title.TLabel",
             anchor="center",
         )
-        title.pack(fill="x", pady=(0, 2))
+        title.pack(fill="x", pady=(1, 3))
 
         workbench = ttk.Frame(outer, style="App.TFrame")
         workbench.pack(side="top", fill="both", expand=True)
@@ -2963,22 +2963,27 @@ class AccountingApp:
             style="Panel.TLabelframe",
             padding=(10 if compact else 12, 14 if compact else 16, 10 if compact else 12, 8 if compact else 10),
         )
-        left_panel.grid(row=0, column=0, sticky="new", padx=(0, 8 if compact else 10))
+        left_panel.grid(row=0, column=0, sticky="nsew", padx=(0, 8 if compact else 10))
         left_panel.columnconfigure(0, weight=1)
-        ttk.Label(left_panel, textvariable=self.input_status, style="Panel.TLabel").grid(row=0, column=0, sticky="ew", pady=(2, 4))
-        ttk.Label(left_panel, textvariable=self.output_status, style="PanelMuted.TLabel").grid(row=1, column=0, sticky="ew", pady=(0, 10))
-        ttk.Button(left_panel, text="导入图片", command=self._choose_image_dir, style="Tool.TButton").grid(row=2, column=0, sticky="ew", pady=4, ipady=2)
-        ttk.Button(left_panel, text="待处理图片", command=self.open_image_dir, style="Tool.TButton").grid(row=3, column=0, sticky="ew", pady=4, ipady=2)
+        left_panel.rowconfigure(0, weight=1)
+        left_panel.rowconfigure(2, weight=1)
+        left_content = ttk.Frame(left_panel, style="Panel.TFrame")
+        left_content.grid(row=1, column=0, sticky="ew")
+        left_content.columnconfigure(0, weight=1)
+        ttk.Label(left_content, textvariable=self.input_status, style="Panel.TLabel").grid(row=0, column=0, sticky="ew", pady=(2, 4))
+        ttk.Label(left_content, textvariable=self.output_status, style="PanelMuted.TLabel").grid(row=1, column=0, sticky="ew", pady=(0, 10))
+        ttk.Button(left_content, text="导入图片", command=self._choose_image_dir, style="Tool.TButton").grid(row=2, column=0, sticky="ew", pady=4, ipady=2)
+        ttk.Button(left_content, text="待处理图片", command=self.open_image_dir, style="Tool.TButton").grid(row=3, column=0, sticky="ew", pady=4, ipady=2)
 
-        ttk.Frame(left_panel, height=10, style="Panel.TFrame").grid(row=4, column=0, sticky="ew")
-        ttk.Button(left_panel, text="一键出表", command=self.run_all, style="Primary.TButton").grid(
+        ttk.Frame(left_content, height=12, style="Panel.TFrame").grid(row=4, column=0, sticky="ew")
+        ttk.Button(left_content, text="一键出表", command=self.run_all, style="Primary.TButton").grid(
             row=5,
             column=0,
             sticky="ew",
             pady=(4 if compact else 5, 6 if compact else 8),
             ipady=3 if compact else 4,
         )
-        action_grid = ttk.Frame(left_panel, style="Panel.TFrame")
+        action_grid = ttk.Frame(left_content, style="Panel.TFrame")
         action_grid.grid(row=6, column=0, sticky="ew")
         action_grid.columnconfigure(0, weight=1)
         action_grid.columnconfigure(1, weight=1)
