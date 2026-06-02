@@ -46,18 +46,23 @@ OCR_ENGINE_LABELS = {
 }
 OCR_ENGINE_BY_LABEL = {label: key for key, label in OCR_ENGINE_LABELS.items()}
 OCR_PROFILE_LABELS = {
-    "stable": "稳妥：PP-OCRv5(ch) 标准推理 batch=8",
-    "fast": "极速：PP-OCRv5(ch)+HPI batch=16",
-    "trt": "极限：PP-OCRv5(ch)+TensorRT/FP16",
+    "stable": "稳妥：PP-OCRv5(ch) 标准推理 [CPU/GPU]",
+    "fast": "极速：PP-OCRv5(ch)+HPI batch=16 [GPU优先]",
+    "trt": "极限：PP-OCRv5(ch)+TensorRT/FP16 [仅GPU]",
 }
 OCR_PROFILE_BY_LABEL = {label: key for key, label in OCR_PROFILE_LABELS.items()}
 OCR_PROFILE_DETAILS = {
-    "stable": "同一套 PP-OCRv5 中文 OCR，开启方向分类、图像矫正、文本行方向；速度稳，不追求极限加速。",
-    "fast": "同一套 PP-OCRv5 中文 OCR，启用 HPI 高性能推理并提高 batch；5090 推荐，通常更快，不代表更会猜。",
-    "trt": "同一套 PP-OCRv5 中文 OCR，尝试 HPI + TensorRT + FP16；要求最高，偏速度/吞吐，环境不支持会自动降级参数。",
+    "stable": "同一套 PP-OCRv5 中文 OCR，开启方向分类、图像矫正、文本行方向；CPU/GPU 都可用，作为自动兜底基线。",
+    "fast": "同一套 PP-OCRv5 中文 OCR，启用 HPI 高性能推理并提高 batch；GPU 优先，缺 ultra-infer/HPI 时会自动降到稳妥档。",
+    "trt": "同一套 PP-OCRv5 中文 OCR，尝试 HPI + TensorRT + FP16；仅适合 GPU 环境，失败会自动降到极速/稳妥档。",
 }
 DEFAULT_EXCEL_IMAGE_MODE = "external"
 EXCEL_IMAGE_MODES = {"external", "embedded"}
+
+
+class SuppressPopupError(RuntimeError):
+    """Task failed after internal retries; keep the details in the progress log."""
+
 DEFAULT_EXCEL_COLUMNS = [
     {"enabled": True, "title": "日期", "source": "日期", "width": 12},
     {"enabled": True, "title": "车号", "source": "车号", "width": 12},
@@ -2053,6 +2058,38 @@ def paddle_basic_ready(state: dict | None) -> bool:
     return bool(state and state.get("paddleocr") and state.get("paddle"))
 
 
+def local_ocr_attempt_plan(selected_profile: str, paddle_state: dict | None) -> list[tuple[str, str]]:
+    selected = selected_profile if selected_profile in OCR_PROFILE_LABELS else "stable"
+    device = "gpu:0" if paddle_ready(paddle_state) else "cpu"
+    raw_plan: list[tuple[str, str]]
+    if device == "cpu":
+        raw_plan = [("stable", "cpu")]
+    elif selected == "trt":
+        raw_plan = [("trt", "gpu:0"), ("fast", "gpu:0"), ("stable", "gpu:0"), ("stable", "cpu")]
+    elif selected == "fast":
+        raw_plan = [("fast", "gpu:0"), ("stable", "gpu:0"), ("stable", "cpu")]
+    else:
+        raw_plan = [("stable", "gpu:0"), ("stable", "cpu")]
+
+    plan: list[tuple[str, str]] = []
+    seen: set[tuple[str, str]] = set()
+    for item in raw_plan:
+        if item not in seen:
+            seen.add(item)
+            plan.append(item)
+    return plan
+
+
+def local_ocr_attempt_title(profile: str, device: str) -> str:
+    names = {
+        "stable": "稳妥档",
+        "fast": "极速档",
+        "trt": "极限档",
+    }
+    target = "CPU" if device == "cpu" else "GPU"
+    return f"{names.get(profile, profile)} / {target}"
+
+
 def find_best_paddle_environment(preferred_python: str = "", log_fn=None) -> tuple[dict | None, list[dict]]:
     candidates: list[str] = []
     if preferred_python:
@@ -2115,6 +2152,11 @@ def self_test() -> int:
     assert desktop_metrics["width"] == 1220
     assert desktop_metrics["height"] == 690
     assert daily_workspace_name(date(2026, 6, 2)) == "2026-06-02_保谊达做账表"
+    gpu_ready_state = {"paddleocr": True, "paddle": True, "cuda_compiled": True, "run_check": True}
+    cpu_ready_state = {"paddleocr": True, "paddle": True, "cuda_compiled": False, "run_check": True}
+    assert local_ocr_attempt_plan("fast", cpu_ready_state) == [("stable", "cpu")]
+    assert local_ocr_attempt_plan("fast", gpu_ready_state)[:2] == [("fast", "gpu:0"), ("stable", "gpu:0")]
+    assert local_ocr_attempt_plan("trt", gpu_ready_state)[:3] == [("trt", "gpu:0"), ("fast", "gpu:0"), ("stable", "gpu:0")]
     with tempfile.TemporaryDirectory() as tmp:
         tmp_dir = Path(tmp)
         image = tmp_dir / "a.jpg"
@@ -2968,7 +3010,7 @@ class AccountingApp:
             text=f"{summary.get('source', '快照')}：{summary.get('updated_at', '-')}",
             anchor="w",
             fill=THEME["muted"],
-            font=("Microsoft YaHei UI", 7),
+            font=("Microsoft YaHei UI", 7, "bold"),
         )
 
     def _draw_pipeline_panel(self, canvas: Canvas) -> None:
@@ -3561,7 +3603,8 @@ class AccountingApp:
                     self.post_progress(self._last_progress_percent, "任务失败", "已停止")
                 self.post(f"失败：{error_message}", "error")
                 self.post("详细错误已保存到输出结果。")
-                self.root.after(0, lambda msg=error_message: messagebox.showerror(APP_TITLE, msg, parent=self.root))
+                if not isinstance(exc, SuppressPopupError):
+                    self.root.after(0, lambda msg=error_message: messagebox.showerror(APP_TITLE, msg, parent=self.root))
         self.worker_thread = threading.Thread(target=runner, daemon=True)
         self.worker_thread.start()
 
@@ -3888,9 +3931,61 @@ class AccountingApp:
 
         worker_path = Path(tempfile.gettempdir()) / "zhipu_paddle_ocr_worker.py"
         worker_path.write_text(OCR_WORKER, encoding="utf-8")
-        device = "gpu:0" if paddle_ready(paddle_state) else "cpu"
-        if device == "cpu":
+        attempts = local_ocr_attempt_plan(self.selected_ocr_profile(), paddle_state)
+        if attempts and attempts[0][1] == "cpu":
             self.post("本地 OCR 将使用 CPU 模式；如要调用 5090，请先让 GPU 版 PaddlePaddle 通过检查。")
+            self.root.after(0, self.ocr_profile.set, OCR_PROFILE_LABELS["stable"])
+        else:
+            self.post("本地 OCR 将按机器状态自动尝试档位：" + " -> ".join(local_ocr_attempt_title(p, d) for p, d in attempts))
+
+        failures: list[str] = []
+        for index, (profile, device) in enumerate(attempts, 1):
+            attempt_title = local_ocr_attempt_title(profile, device)
+            if raw_json.exists():
+                try:
+                    raw_json.unlink()
+                except FileNotFoundError:
+                    pass
+            self.post(f"本地 OCR 尝试 {index}/{len(attempts)}：{attempt_title}", "section")
+            self.post_progress(progress_base, "OCR 识别准备", attempt_title)
+            try:
+                self._run_paddle_ocr_attempt(
+                    worker_path,
+                    image_dir,
+                    raw_json,
+                    images,
+                    paddle_state,
+                    profile,
+                    device,
+                    progress_fn,
+                )
+                self.root.after(0, self.ocr_profile.set, OCR_PROFILE_LABELS.get(profile, OCR_PROFILE_LABELS["stable"]))
+                self.post(f"本地 OCR 已使用 {attempt_title} 跑通。", "success")
+                return
+            except Exception as exc:
+                message = str(exc)
+                failures.append(f"{attempt_title}: {message}")
+                self.post(f"{attempt_title} 未跑通：{message}", "error")
+                if index < len(attempts):
+                    self.post("继续自动切换下一档；不需要手动改设置。", "section")
+
+        raise SuppressPopupError(
+            "本地 OCR 自动换档后仍未跑通，已停止生成。"
+            "请查看中间日志；可先用在线智谱 OCR 出表，或安装完整本地 Paddle 环境后重试。"
+            "失败记录：" + " | ".join(failures[-3:])
+        )
+
+    def _run_paddle_ocr_attempt(
+        self,
+        worker_path: Path,
+        image_dir: Path,
+        raw_json: Path,
+        images: list[Path],
+        paddle_state: dict,
+        profile: str,
+        device: str,
+        progress_fn,
+    ) -> None:
         cmd = [
             paddle_state["python"],
             str(worker_path),
@@ -3899,7 +3994,7 @@ class AccountingApp:
             "--output",
             str(raw_json),
             "--profile",
-            self.selected_ocr_profile(),
+            profile,
             "--device",
             device,
         ]
@@ -3909,21 +4004,25 @@ class AccountingApp:
         env.setdefault("PADDLE_PDX_MODEL_SOURCE", "BOS")
         process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, encoding="utf-8", errors="replace", env=env)
         assert process.stdout is not None
+        output_tail: list[str] = []
         for line in process.stdout:
             clean_line = line.rstrip()
+            if clean_line:
+                output_tail.append(clean_line)
+                output_tail = output_tail[-8:]
             self.post(clean_line)
             match = re.search(r"\[(\d+)/(\d+)\]\s+(\S+)", clean_line)
             if match:
                 progress_fn(int(match.group(1)), int(match.group(2)), match.group(3))
         code = process.wait()
         if code != 0:
-            raise RuntimeError(f"OCR 进程退出码 {code}")
+            detail = "；".join(output_tail[-4:]) if output_tail else ""
+            raise RuntimeError(f"OCR 进程退出码 {code}" + (f"；{detail}" if detail else ""))
         status = ocr_json_status(raw_json, images)
         if not status["complete"]:
             raise RuntimeError(
-                f"本地 OCR 没有生成完整可用结果，已停止生成 Excel。"
-                f"已识别 {status['ok_count']}/{status['image_count']}，"
-                f"失败/空文本 {len(status['invalid'])}，缺少 {len(status['missing'])}。"
+                f"结果不完整：已识别 {status['ok_count']}/{status['image_count']}，"
+                f"失败/空文本 {len(status['invalid'])}，缺少 {len(status['missing'])}"
             )
 
     def parse_and_excel(self) -> None:
