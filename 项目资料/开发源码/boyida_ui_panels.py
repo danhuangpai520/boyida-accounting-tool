@@ -30,10 +30,9 @@ def build_left_panel(app, workbench, compact: bool, ultra_compact: bool) -> None
     ttk.Label(left_content, textvariable=app.input_status, style="BatchStatus.TLabel").grid(row=0, column=0, sticky="ew", pady=status_gap)
     ttk.Label(left_content, textvariable=app.output_status, style="BatchPath.TLabel").grid(row=1, column=0, sticky="ew", pady=path_gap)
     ttk.Button(left_content, text="导入图片", command=app._choose_image_dir, style="Batch.TButton").grid(row=2, column=0, sticky="ew", pady=(0, button_gap), ipady=batch_ipady)
-    ttk.Button(left_content, text="待处理图片", command=app.open_image_dir, style="Batch.TButton").grid(row=3, column=0, sticky="ew", pady=button_gap, ipady=batch_ipady)
-    ttk.Frame(left_content, height=spacer_height, style="Panel.TFrame").grid(row=4, column=0, sticky="ew")
+    ttk.Frame(left_content, height=spacer_height, style="Panel.TFrame").grid(row=3, column=0, sticky="ew")
     ttk.Button(left_content, text="一键出表", command=app.run_all, style="BatchPrimary.TButton").grid(
-        row=5,
+        row=4,
         column=0,
         sticky="ew",
         pady=primary_gap,
@@ -41,11 +40,11 @@ def build_left_panel(app, workbench, compact: bool, ultra_compact: bool) -> None
     )
 
     action_grid = ttk.Frame(left_content, style="Panel.TFrame")
-    action_grid.grid(row=6, column=0, sticky="ew")
+    action_grid.grid(row=5, column=0, sticky="ew")
     action_grid.columnconfigure(0, weight=1)
     action_grid.columnconfigure(1, weight=1)
     action_buttons = [
-        ("扫图片", app.scan_batch),
+        ("检测环境", app.check_ocr_env),
         ("打开结果", app.open_work_dir),
         ("OCR 设置", app.open_ocr_settings),
         ("GPS 设置", app.open_gps_settings),
@@ -62,7 +61,7 @@ def build_left_panel(app, workbench, compact: bool, ultra_compact: bool) -> None
                 ipady=batch_ipady,
             )
     ttk.Button(left_content, text="检查更新", command=app.check_for_updates, style="Batch.TButton").grid(
-        row=7,
+        row=6,
         column=0,
         sticky="ew",
         pady=update_gap,

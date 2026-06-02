@@ -47,7 +47,7 @@ except Exception:
 
 COMPANY_NAME = "保谊达"
 APP_TITLE = f"{COMPANY_NAME}车队做账工具"
-APP_VERSION = "1.9"
+APP_VERSION = "1.10"
 IMAGE_SUFFIXES = {".jpg", ".jpeg", ".png", ".bmp", ".webp"}
 HEADERS = ["日期", "车号", "驾驶员", "重量", "货物名称", "装货地", "收货地", "备注", "原图"]
 OCR_ENGINE_LABELS = {
@@ -2126,7 +2126,7 @@ def find_best_paddle_environment(preferred_python: str = "", log_fn=None) -> tup
 
 
 def self_test() -> int:
-    assert APP_VERSION == "1.9"
+    assert APP_VERSION == "1.10"
     assert is_newer_version("v1.10", "1.9")
     assert is_newer_version("v1.6", "1.5")
     assert not is_newer_version("v1.6", "1.6")
@@ -4063,6 +4063,7 @@ class AccountingApp:
         self._preflight_ocr_for_generation()
         self._run_ocr_impl(progress_base=8, progress_span=72)
         self._parse_and_excel_impl(template, progress_base=82, progress_span=16)
+        self.root.after(0, self.open_work_dir)
 
     def open_work_dir(self) -> None:
         self.log_section("打开结果")
@@ -4149,8 +4150,10 @@ def startup_smoke_test() -> int:
         if os.environ.get("BOYIDA_EXPECT_NO_EMBEDDED_KEY"):
             assert not builtin_api_key(), "公开版 EXE 不应包含内置 API Key"
         texts = set(_widget_texts(app.root))
-        for label in ("导入图片", "待处理图片", "扫图片", "一键出表", "打开结果", "OCR 设置", "GPS 设置", "检查更新"):
+        for label in ("导入图片", "检测环境", "一键出表", "打开结果", "OCR 设置", "GPS 设置", "检查更新"):
             assert label in texts, label
+        assert "待处理图片" not in texts
+        assert "扫图片" not in texts
         update_button = _find_widget_by_text(app.root, "检查更新")
         assert update_button is not None
         assert update_button.winfo_rooty() + update_button.winfo_height() <= app.root.winfo_rooty() + app.root.winfo_height(), "检查更新按钮不可见"
@@ -4161,7 +4164,6 @@ def startup_smoke_test() -> int:
         assert app.pipeline_canvas.winfo_reqheight() <= 168
         assert float(app.progress_value.get()) == 0.0
 
-        app.scan_batch()
         app.open_work_dir()
 
         app.open_ocr_settings()
