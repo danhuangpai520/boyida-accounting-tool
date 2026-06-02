@@ -25,3 +25,5 @@ gps_api_config.json
 gps_summary.json
 .env
 .env.*
+# Local private execution spec; GitHub tracks 做账执行规范_公开版.md instead.
+/做账执行规范.md
