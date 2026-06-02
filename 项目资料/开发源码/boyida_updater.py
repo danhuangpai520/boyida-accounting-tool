@@ -11,6 +11,7 @@ from pathlib import Path
 
 
 GITHUB_RELEASE_API = "https://api.github.com/repos/danhuangpai520/boyida-accounting-tool/releases/latest"
+GITHUB_RELEASE_LIST_API = "https://api.github.com/repos/danhuangpai520/boyida-accounting-tool/releases?per_page=20"
 GITHUB_RELEASES_URL = "https://github.com/danhuangpai520/boyida-accounting-tool/releases"
 GITHUB_LATEST_URL = "https://github.com/danhuangpai520/boyida-accounting-tool/releases/latest"
 GITHUB_DOWNLOAD_BASE = "https://github.com/danhuangpai520/boyida-accounting-tool/releases/download"
@@ -132,6 +133,23 @@ def release_info_from_payload(payload: dict) -> dict:
     }
 
 
+def release_info_from_release_list(payload: list[dict]) -> dict:
+    candidates = []
+    for item in payload if isinstance(payload, list) else []:
+        if not isinstance(item, dict):
+            continue
+        if item.get("draft") or item.get("prerelease"):
+            continue
+        try:
+            info = release_info_from_payload(item)
+        except Exception:
+            continue
+        candidates.append(info)
+    if not candidates:
+        raise RuntimeError("GitHub Release 列表中没有可下载的正式 EXE 版本。")
+    return sorted(candidates, key=lambda item: parse_version_tuple(item["tag"]), reverse=True)[0]
+
+
 def _release_info_from_tag(tag: str, source: str) -> dict:
     asset_name = f"boyida-accounting-tool-{tag}.exe"
     return {
@@ -147,20 +165,72 @@ def _release_info_from_tag(tag: str, source: str) -> dict:
     }
 
 
+def _tag_info_from_release_page(html: str, source: str) -> dict:
+    tags = set(re.findall(r"/danhuangpai520/boyida-accounting-tool/releases/tag/([^\"?#]+)", html or ""))
+    tags.update(re.findall(r"/releases/tag/([^\"?#]+)", html or ""))
+    normal_tags = [tag for tag in tags if parse_version_tuple(tag) != (0,)]
+    if not normal_tags:
+        raise RuntimeError("GitHub Releases 页面中没有识别到版本号。")
+    tag = sorted(normal_tags, key=parse_version_tuple, reverse=True)[0]
+    return _release_info_from_tag(tag, source)
+
+
+def fetch_latest_release_info_by_list_api(current_version: str = "", timeout: int = 12) -> dict:
+    request = urllib.request.Request(
+        GITHUB_RELEASE_LIST_API,
+        headers={
+            "Accept": "application/vnd.github+json",
+            "User-Agent": f"BoyidaAccountingTool/{current_version or 'unknown'}",
+        },
+    )
+    with urllib.request.urlopen(request, timeout=timeout) as response:
+        payload = json.loads(response.read().decode("utf-8"))
+    info = release_info_from_release_list(payload)
+    info["source"] = "python_github_release_list"
+    return info
+
+
+def fetch_latest_release_info_by_release_page(timeout: int = 12) -> dict:
+    request = urllib.request.Request(
+        GITHUB_RELEASES_URL,
+        headers={"User-Agent": "BoyidaAccountingTool"},
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=timeout) as response:
+            html = response.read().decode("utf-8", errors="replace")
+    except urllib.error.URLError as exc:
+        if is_certificate_error(exc):
+            return fetch_latest_release_info_by_windows_release_page(timeout=max(timeout, 20))
+        raise
+    except ssl.SSLError:
+        return fetch_latest_release_info_by_windows_release_page(timeout=max(timeout, 20))
+    return _tag_info_from_release_page(html, "python_release_page")
+
+
 def fetch_latest_release_info_by_windows_web(timeout: int = 20) -> dict:
     """Use Windows' certificate store when Python/PyInstaller CA roots are unavailable."""
     script = f"""
 $headers = @{{ Accept = 'application/vnd.github+json'; 'User-Agent' = 'BoyidaAccountingTool' }}
-$payload = Invoke-RestMethod -Uri {_ps_literal(GITHUB_RELEASE_API)} -Headers $headers -TimeoutSec {max(int(timeout), 1)}
+$payload = Invoke-RestMethod -Uri {_ps_literal(GITHUB_RELEASE_LIST_API)} -Headers $headers -TimeoutSec {max(int(timeout), 1)}
 $payload | ConvertTo-Json -Depth 12 -Compress
 """
     try:
         raw = _run_windows_powershell(script, timeout=max(int(timeout) + 8, 20))
-        info = release_info_from_payload(json.loads(raw))
+        info = release_info_from_release_list(json.loads(raw))
         info["source"] = "windows_system_certificate"
         return info
     except Exception:
-        return fetch_latest_release_info_by_windows_redirect(timeout=timeout)
+        return fetch_latest_release_info_by_windows_release_page(timeout=timeout)
+
+
+def fetch_latest_release_info_by_windows_release_page(timeout: int = 20) -> dict:
+    script = f"""
+$client = New-Object System.Net.WebClient
+$client.Headers.Add('User-Agent', 'BoyidaAccountingTool')
+$client.DownloadString({_ps_literal(GITHUB_RELEASES_URL)})
+"""
+    html = _run_windows_powershell(script, timeout=max(int(timeout) + 8, 20))
+    return _tag_info_from_release_page(html, "windows_release_page")
 
 
 def fetch_latest_release_info_by_windows_redirect(timeout: int = 20) -> dict:
@@ -198,6 +268,19 @@ try {{
 
 
 def fetch_latest_release_info(current_version: str, timeout: int = 12) -> dict:
+    try:
+        return fetch_latest_release_info_by_list_api(current_version=current_version, timeout=timeout)
+    except urllib.error.HTTPError as exc:
+        if exc.code != 403:
+            raise
+    except urllib.error.URLError as exc:
+        if is_certificate_error(exc):
+            return fetch_latest_release_info_by_windows_web(timeout=max(timeout, 20))
+    except ssl.SSLError:
+        return fetch_latest_release_info_by_windows_web(timeout=max(timeout, 20))
+    except Exception:
+        pass
+
     request = urllib.request.Request(
         GITHUB_RELEASE_API,
         headers={
@@ -211,7 +294,7 @@ def fetch_latest_release_info(current_version: str, timeout: int = 12) -> dict:
     except urllib.error.HTTPError as exc:
         if exc.code == 403:
             try:
-                return fetch_latest_release_info_by_redirect(timeout=timeout)
+                return fetch_latest_release_info_by_release_page(timeout=timeout)
             except Exception:
                 return fetch_latest_release_info_by_raw_version(timeout=timeout)
         if exc.code == 404:
@@ -238,10 +321,10 @@ def fetch_latest_release_info_by_redirect(timeout: int = 12) -> dict:
             final_url = response.geturl()
     except urllib.error.URLError as exc:
         if is_certificate_error(exc):
-            return fetch_latest_release_info_by_windows_redirect(timeout=max(timeout, 20))
+            return fetch_latest_release_info_by_windows_release_page(timeout=max(timeout, 20))
         raise
     except ssl.SSLError:
-        return fetch_latest_release_info_by_windows_redirect(timeout=max(timeout, 20))
+        return fetch_latest_release_info_by_windows_release_page(timeout=max(timeout, 20))
     match = re.search(r"/releases/tag/([^/?#]+)", final_url)
     if not match:
         raise RuntimeError("GitHub 最新版本跳转地址无法识别。")
@@ -258,12 +341,12 @@ def fetch_latest_release_info_by_raw_version(timeout: int = 12) -> dict:
             version = response.read().decode("utf-8").strip()
     except urllib.error.URLError as exc:
         if is_certificate_error(exc):
-            return fetch_latest_release_info_by_windows_redirect(timeout=max(timeout, 20))
-        return fetch_latest_release_info_by_redirect(timeout=timeout)
+            return fetch_latest_release_info_by_windows_release_page(timeout=max(timeout, 20))
+        return fetch_latest_release_info_by_release_page(timeout=timeout)
     except ssl.SSLError:
-        return fetch_latest_release_info_by_windows_redirect(timeout=max(timeout, 20))
+        return fetch_latest_release_info_by_windows_release_page(timeout=max(timeout, 20))
     except Exception:
-        return fetch_latest_release_info_by_redirect(timeout=timeout)
+        return fetch_latest_release_info_by_release_page(timeout=timeout)
     tag = version if version.lower().startswith("v") else f"v{version}"
     return _release_info_from_tag(tag, "raw_version")
 
