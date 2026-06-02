@@ -47,7 +47,7 @@ except Exception:
 
 COMPANY_NAME = "保谊达"
 APP_TITLE = f"{COMPANY_NAME}车队做账工具"
-APP_VERSION = "1.8"
+APP_VERSION = "1.9"
 IMAGE_SUFFIXES = {".jpg", ".jpeg", ".png", ".bmp", ".webp"}
 HEADERS = ["日期", "车号", "驾驶员", "重量", "货物名称", "装货地", "收货地", "备注", "原图"]
 OCR_ENGINE_LABELS = {
@@ -2126,7 +2126,7 @@ def find_best_paddle_environment(preferred_python: str = "", log_fn=None) -> tup
 
 
 def self_test() -> int:
-    assert APP_VERSION == "1.8"
+    assert APP_VERSION == "1.9"
     assert is_newer_version("v1.10", "1.9")
     assert is_newer_version("v1.6", "1.5")
     assert not is_newer_version("v1.6", "1.6")
@@ -3210,6 +3210,8 @@ class AccountingApp:
     def _check_updates_impl(self) -> None:
         self.post_progress(15, "检查更新", "连接 GitHub")
         info = fetch_latest_release_info(APP_VERSION, timeout=15)
+        if info.get("source") == "windows_system_certificate":
+            self.post("Python 证书链不可用，已自动切换到 Windows 系统证书更新通道。")
         self.post_progress(60, "检查更新", f"最新版本 {info['tag']}")
         self.post(f"当前版本：v{APP_VERSION}")
         self.post(f"GitHub 最新版本：{info['tag']}")
@@ -3250,6 +3252,16 @@ class AccountingApp:
         self.post(f"下载地址：{info['download_url']}")
 
         def progress(done: int, total: int) -> None:
+            if total <= 16 and done <= total:
+                labels = {
+                    1: "切换 Windows 系统证书下载通道",
+                    2: "正在下载更新文件",
+                    3: "下载完成，正在校验",
+                    4: "备用下载通道完成",
+                }
+                percent = 10 + 76 * done / max(total, 1)
+                self.post_progress(percent, "下载更新", labels.get(done, "备用下载通道处理中"))
+                return
             percent = 10 + 76 * done / max(total, 1)
             self.post_progress(percent, "下载更新", f"{done / 1024 / 1024:.1f}/{total / 1024 / 1024:.1f} MB")
 
