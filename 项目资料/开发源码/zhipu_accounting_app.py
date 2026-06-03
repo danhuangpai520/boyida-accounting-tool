@@ -47,7 +47,7 @@ except Exception:
 
 COMPANY_NAME = "保谊达"
 APP_TITLE = f"{COMPANY_NAME}车队做账工具"
-APP_VERSION = "2.2"
+APP_VERSION = "2.3"
 IMAGE_SUFFIXES = {".jpg", ".jpeg", ".png", ".bmp", ".webp"}
 HEADERS = ["日期", "车号", "驾驶员", "重量", "货物名称", "装货地", "收货地", "备注", "原图"]
 OCR_ENGINE_LABELS = {
@@ -134,12 +134,12 @@ def adaptive_window_metrics(screen_w: int, screen_h: int) -> dict:
     compact = screen_w < 1280 or screen_h < 820
 
     width = min(1140, max(940, int(screen_w * 0.88)))
-    height = min(630, max(570, int(screen_h * 0.72)))
+    height = min(525, max(500, int(screen_h * 0.54)))
     width = min(width, max(720, screen_w - 32))
-    height = min(height, max(540, screen_h - 56))
+    height = min(height, max(470, screen_h - 56))
 
     min_width = 1040 if not compact else 860
-    min_height = 580 if not compact else 550
+    min_height = 500 if not compact else 490
     min_width = min(min_width, width)
     min_height = min(min_height, height)
 
@@ -2127,7 +2127,8 @@ def find_best_paddle_environment(preferred_python: str = "", log_fn=None) -> tup
 
 
 def self_test() -> int:
-    assert APP_VERSION == "2.2"
+    assert APP_VERSION == "2.3"
+    assert is_newer_version("v2.3", "2.2")
     assert is_newer_version("v2.2", "2.1")
     assert is_newer_version("v2.1", "2.0")
     assert is_newer_version("v2.0", "1.9")
@@ -2182,7 +2183,7 @@ def self_test() -> int:
     assert small_metrics["compact"] is True
     desktop_metrics = adaptive_window_metrics(1920, 1080)
     assert desktop_metrics["width"] == 1140
-    assert desktop_metrics["height"] == 630
+    assert desktop_metrics["height"] == 525
     assert daily_workspace_name(date(2026, 6, 2)) == "2026-06-02_保谊达做账表"
     gpu_ready_state = {"paddleocr": True, "paddle": True, "cuda_compiled": True, "run_check": True}
     cpu_ready_state = {"paddleocr": True, "paddle": True, "cuda_compiled": False, "run_check": True}
@@ -3120,11 +3121,11 @@ class AccountingApp:
         outer.pack(fill="both", expand=True)
 
         header = ttk.Frame(outer, style="App.TFrame")
-        header.pack(fill="x", pady=(0, 8 if compact else 10))
+        header.pack(fill="x", pady=(0, 3 if compact else 4))
         header.bind("<ButtonPress-1>", self._start_window_drag)
         header.bind("<B1-Motion>", self._drag_window)
 
-        header_height = 82 if compact else 92
+        header_height = 72 if compact else 78
         self.header_canvas = Canvas(header, height=header_height, bg=THEME["bg"], highlightthickness=0)
         self.header_canvas.pack(fill="x")
         self.header_canvas.bind("<Configure>", lambda _event: self._draw_header_panel(self.header_canvas))

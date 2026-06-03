@@ -4,9 +4,9 @@ from tkinter import Canvas, Text, ttk
 def build_left_panel(app, workbench, compact: bool, ultra_compact: bool) -> None:
     del ultra_compact
     panel_pad = (8 if compact else 10, 10 if compact else 12, 8 if compact else 10, 6 if compact else 8)
-    status_gap = (2, 4 if compact else 6)
-    path_gap = (0, 8 if compact else 10)
-    button_gap = 7 if compact else 8
+    status_gap = (4, 5 if compact else 7)
+    path_gap = (0, 10 if compact else 12)
+    button_gap = 8 if compact else 9
     primary_gap = (0, button_gap)
     action_gap = (0, button_gap)
     update_gap = (0, 0)
@@ -23,7 +23,7 @@ def build_left_panel(app, workbench, compact: bool, ultra_compact: bool) -> None
     left_panel.rowconfigure(0, weight=0)
 
     left_content = ttk.Frame(left_panel, style="Panel.TFrame")
-    left_content.grid(row=0, column=0, sticky="new")
+    left_content.grid(row=0, column=0, sticky="new", pady=(6 if compact else 8, 0))
     left_content.columnconfigure(0, weight=1)
     ttk.Label(left_content, textvariable=app.input_status, style="BatchStatus.TLabel").grid(row=0, column=0, sticky="ew", pady=status_gap)
     ttk.Label(left_content, textvariable=app.output_status, style="BatchPath.TLabel").grid(row=1, column=0, sticky="ew", pady=path_gap)
@@ -105,7 +105,7 @@ def build_center_panel(app, workbench, compact: bool, ultra_compact: bool, theme
     app.progress_log_text = Text(
         progress_log_frame,
         wrap="word",
-        height=7 if compact else 8,
+        height=4 if compact else 5,
         bg=theme["log"],
         fg=theme["muted"],
         insertbackground=theme["cyan"],
@@ -155,4 +155,3 @@ def build_right_panel(app, workbench, compact: bool, ultra_compact: bool, theme:
     ttk.Label(ocr_panel, text="ZHIPU API Key", style="PanelMuted.TLabel").grid(row=5, column=0, sticky="w")
     ttk.Entry(ocr_panel, textvariable=app.api_key, show="*").grid(row=6, column=0, sticky="ew", pady=(2, 4))
     ttk.Checkbutton(ocr_panel, text="记住 Key（仅本机）", variable=app.remember_api_key).grid(row=7, column=0, sticky="w")
-    ttk.Label(ocr_panel, textvariable=app.api_key_source, style="PanelMuted.TLabel").grid(row=8, column=0, sticky="w", pady=(4, 0))
