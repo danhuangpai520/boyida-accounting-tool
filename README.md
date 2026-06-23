@@ -19,6 +19,15 @@
 
 当前工作副本安装包方案使用 Inno Setup，把稳定版 onedir 安装到 `%LocalAppData%\Programs\BoyidaAccountingTool`，并创建 `扫描导入` 文件夹。扫描仪或人工保存图片到 `扫描导入\日期批次` 或 `扫描导入\日期\批次` 后，软件会检测新批次并询问是否立即一键出表。
 
+2026-06-24 工作副本状态：安装器已改为默认创建当前用户桌面快捷方式 `{userdesktop}\保谊达车队做账工具`，目标为 `{app}\做账执行工具.exe`；主界面已做小屏/VM 自适应，侧栏、左右栏、顶栏和流程 pipeline canvas 会按可用高度压缩，避免按钮或流程被裁切；OCR 快速控制已从窄 `ttk.Combobox` 改为点击按钮弹出选择面板，并保留旧 adapter 数据流兼容。包体大小本轮按要求暂不处理。
+
+本轮公开验证状态：Python 3.11 `py_compile`、`--self-test`、`--startup-smoke-test`、`--tray-menu-probe`、`--scanner-watch-probe` 已通过；安装器已在本机临时目录完成静默安装/卸载 smoke，确认桌面快捷方式创建、目标正确，卸载后快捷方式、安装目录、配置目录和卸载注册表清理干净。尚未在用户真实 VM 中亲手运行。
+
+当前工作副本产物哈希：
+
+- `做账执行工具.exe` SHA256：`2610906320A30BF951911E457297CF586C8D3277A89AD2FAB897C297AF6D112D`
+- `项目资料\安装包\输出\BoyidaAccountingTool_Setup_v2.3.exe` SHA256：`C10FC1109A1456C7C73A823313155874D15AE80112BAB639FE533D907DDCD750`
+
 ## 隐私规则
 
 - 不在 GitHub 文档、源码或配置样例里提交真实智谱、阿里云、百度、腾讯云 API Key。
