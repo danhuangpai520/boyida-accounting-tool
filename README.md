@@ -44,7 +44,7 @@
 - 公开可追踪 UI 图片资产：`项目资料\开发源码\assets\boyida_truck.png`、`boyida_truck.ico`、`jingzhe_header_line.png`。
 - `做账执行工具.exe + _internal` onedir 运行形态、Inno 安装器构建/验证流程、默认当前用户桌面快捷方式和 `扫描导入` 文件夹。
 - UI/交互合同：左侧导航、顶部主动作、中间流程与日志、右侧 GPS/OCR 控制；OCR 引擎和接口/模式已从窄下拉框改为按钮弹出选择面板。
-- OCR/API 安全边界：千问视觉 OCR（百炼 OpenAI 兼容接口）已作为独立在线 OCR 引擎接入源码，默认 / 优先模型为 `qwen3.7-plus`，同时可选 `qwen3-vl-plus`；模型名、`workspace_id`、`region` 和 endpoint/base URL 可通过本机安全配置覆盖，配置 `workspace_id` 时会按百炼官方工作空间地址自动生成 endpoint；软件内 `OCR 设置 -> 千问配置` 可保存本机 DPAPI 配置并直接测试，`OCR 设置 -> 测试千问` 可立刻跑真实探针；`--qwen-key-template` 只生成本机私有模板，`--qwen-configure-key` 弹窗保存本机 DPAPI 配置后立即探针，`--qwen-import-key-from-clipboard` 只从当前剪贴板提取 Key 形态并隐藏保存后立即探针，`--qwen-live-probe` 只做本机安全凭据探针；公开文档只记录安全配置口径，不记录任何真实密钥。
+- OCR/API 安全边界：千问视觉 OCR（百炼 OpenAI 兼容接口）已作为独立在线 OCR 引擎接入源码，默认 / 优先模型为官方 OCR 专用 `qwen-vl-ocr`，同时可选 `qwen3-vl-plus` 和兼容旧 `qwen3.7-plus`；模型名、`workspace_id`、`region` 和 endpoint/base URL 可通过本机安全配置覆盖，配置 `workspace_id` 时会按百炼官方工作空间地址自动生成 endpoint；软件内 `OCR 设置 -> 千问配置` 可保存本机 DPAPI 配置并直接测试，`OCR 设置 -> 测试千问` 可立刻跑真实探针；`--qwen-preflight` 可先做无联网、无泄密的本机凭据/模型/endpoint 预检，`--qwen-key-template` 只生成本机私有模板，`--qwen-configure-key` 弹窗保存本机 DPAPI 配置后立即探针，`--qwen-import-key-from-clipboard` 只从当前剪贴板提取 Key 形态并隐藏保存后立即探针，`--qwen-live-probe` 只做本机安全凭据探针；公开文档只记录安全配置口径，不记录任何真实密钥。
 - 扫描监听行为：批次目录发现、文件稳定等待、立即/稍后/忽略、成功后标记、失败后可重试。
 - 卸载清理范围：安装目录、快捷方式、安装目录下扫描/批次目录、用户配置目录和卸载注册表项。
 - 当前公开工作副本产物哈希。
@@ -69,7 +69,8 @@
 | 4. 跑交互探针 | 主程序源码 | `python .\项目资料\开发源码\zhipu_accounting_app.py --tray-menu-probe`；`python .\项目资料\开发源码\zhipu_accounting_app.py --scanner-watch-probe` | `TRAY_MENU_PROBE_OK`、`SCANNER_WATCH_PROBE_OK` | 不导入客户原图 |
 | 4a. 生成千问 Key 模板 | 主程序源码 | `python .\项目资料\开发源码\zhipu_accounting_app.py --qwen-key-template` | 输出 `QWEN_KEY_TEMPLATE_READY`，只在本机私有 `API KEY` 文件夹生成 `qwen.example.txt` | 复制为 `qwen.txt` 或改用 `qwen.csv` 时由用户本机填写；不提交、不打印真实 Key |
 | 4b. 本机配置千问 Key | 主程序源码 + 用户本机授权 | 软件内点 `OCR 设置 -> 千问配置`，或运行 `--qwen-configure-key`；也可先复制 Key/workspace 配置后运行 `--qwen-import-key-from-clipboard` | 保存后立即执行真实探针；成功输出 `QWEN_LIVE_PROBE_OK` | 弹窗/剪贴板入口不打印 Key，不把 Key 写入源码、文档、命令行或 Git |
-| 4c. 跑千问在线探针 | 主程序源码 + 本机安全凭据 | `python .\项目资料\开发源码\zhipu_accounting_app.py --qwen-live-probe` | 有 Key 时输出 `QWEN_LIVE_PROBE_OK`；无 Key 时输出 `QWEN_LIVE_PROBE_MISSING_KEY` | 不在命令行、源码、文档或 Git 中写真实 Key |
+| 4c. 千问调用预检 | 主程序源码 + 本机安全凭据 | `python .\项目资料\开发源码\zhipu_accounting_app.py --qwen-preflight` | 有 Key 时输出 `QWEN_PREFLIGHT_READY`；无 Key 时输出 `QWEN_PREFLIGHT_MISSING_KEY` | 不联网、不打印 Key，用于先确认模型和 endpoint 候选 |
+| 4d. 跑千问在线探针 | 主程序源码 + 本机安全凭据 | `python .\项目资料\开发源码\zhipu_accounting_app.py --qwen-live-probe` | 有 Key 时输出 `QWEN_LIVE_PROBE_OK`；无 Key 时输出 `QWEN_LIVE_PROBE_MISSING_KEY` | 不在命令行、源码、文档或 Git 中写真实 Key |
 | 5. 验证安装器 | `做账执行工具.exe`、`_internal`、安装包脚本 | `powershell -NoProfile -ExecutionPolicy Bypass -File .\项目资料\安装包\构建安装包.ps1 -SkipAppBuild`，再做临时目录安装/卸载 smoke | 桌面快捷方式目标正确；卸载后快捷方式、安装目录、配置目录和卸载注册表清理干净 | 不改变安装脚本里的安全清理边界 |
 | 6. 校验产物 | 根目录 EXE、安装器输出 | `Get-FileHash .\做账执行工具.exe -Algorithm SHA256`；`Get-FileHash .\项目资料\安装包\输出\BoyidaAccountingTool_Setup_v2.3.exe -Algorithm SHA256` | 分别等于本文档列出的两个 SHA256 | 哈希只能证明当前公开产物一致 |
 | 7. 安全扫文档 | 公开 Markdown | 运行下方敏感扫描命令 | 无命中 | 边界说明中的普通词 `Cookie`、`Authorization` 不等于泄密 |
